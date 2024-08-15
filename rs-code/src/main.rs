@@ -1,3 +1,4 @@
+use nom::bytes::complete::{take_while, take_while1};
 use nom::character::complete::digit1;
 use nom::combinator::map;
 use nom::{branch::alt, bytes::complete::tag, IResult};
@@ -10,6 +11,7 @@ fn main() {
     println!("Hello, world!");
 }
 
+#[derive(Debug, PartialEq)]
 enum Token<'a> {
     Identifier(&'a str),
     Reserved(Reserved),
@@ -62,10 +64,24 @@ enum Reserved {
     VAR,
     WHILE,
 }
+fn is_letter_or_underscore(c: char) -> bool {
+    c.is_ascii_alphabetic() || c == '_'
+}
+
+fn is_letter_digit_or_underscore(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
 /// Parses an identifier from the input string.
 /// Identifiers can start with a letter or underscore, and can contain letters, digits, and underscores.
 fn parse_identifier(input: &str) -> IResult<&str, &str> {
-    nom::character::complete::alphanumeric1(input)
+    // TODO this is kind of silly
+    let first_char = take_while1(is_letter_or_underscore);
+
+    recognize(tuple((
+        first_char,
+        take_while(is_letter_digit_or_underscore),
+    )))(input)
 }
 
 fn parse_identifier_or_reserved(input: &str) -> IResult<&str, Token> {
@@ -116,18 +132,34 @@ fn parse_symbol(input: &str) -> IResult<&str, Symbol> {
     ))(input)
 }
 
+fn parse_string_literal(input: &str) -> IResult<&str, &str> {
+    let (input, _) = char('"')(input)?;
+    let (input, string) = take_while(|c| c != '"')(input)?;
+    let (input, _) = char('"')(input)?;
+    Ok((input, string))
+}
 fn parse_number(input: &str) -> IResult<&str, f64> {
     let parse_number = recognize(tuple((digit1, opt(tuple((char('.'), digit1))))));
     map_res(parse_number, |s: &str| s.parse::<f64>())(input)
 }
 fn parse_token(input: &str) -> IResult<&str, Token> {
-    let input = input.trim_start();
     alt((
         parse_identifier_or_reserved,
         map(parse_symbol, Token::Symbol),
         map(parse_number, Token::NumberLiteral),
-        // map(<parse string literal>, Token::StringLiteral),
+        map(parse_string_literal, Token::StringLiteral),
     ))(input)
+}
+
+fn parse_tokens(input: &str) -> IResult<&str, Vec<Token>> {
+    let mut tokens = Vec::new();
+    let mut input = input.trim_start();
+    while !input.is_empty() {
+        let (remaining, token) = parse_token(input)?;
+        tokens.push(token);
+        input = remaining.trim_start();
+    }
+    Ok((input, tokens))
 }
 
 // tests
@@ -160,6 +192,30 @@ mod tests {
         let input = "123.456";
         let expected = Ok(("", 123.456));
         let actual = parse_number(input);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_string_literal() {
+        let input = "\"hello\"+3";
+        let expected = Ok(("+3", "hello"));
+        let actual = parse_string_literal(input);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_multiple_tokens() {
+        let input = "123.456 \"hello\"+3";
+        let expected = Ok((
+            "",
+            vec![
+                Token::NumberLiteral(123.456),
+                Token::StringLiteral("hello"),
+                Token::Symbol(Symbol::PLUS),
+                Token::NumberLiteral(3.),
+            ],
+        ));
+        let actual = parse_tokens(input);
         assert_eq!(actual, expected);
     }
 }
