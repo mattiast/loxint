@@ -1,3 +1,5 @@
+mod syntax;
+
 use nom::bytes::complete::{take_while, take_while1};
 use nom::character::complete::digit1;
 use nom::combinator::map;
