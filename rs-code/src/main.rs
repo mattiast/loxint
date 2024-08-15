@@ -1,14 +1,20 @@
+use nom::character::complete::digit1;
 use nom::combinator::map;
 use nom::{branch::alt, bytes::complete::tag, IResult};
+use nom::{
+    character::complete::char,
+    combinator::{map_res, opt, recognize},
+    sequence::tuple,
+};
 fn main() {
     println!("Hello, world!");
 }
 
 enum Token<'a> {
     Identifier(&'a str),
+    Reserved(Reserved),
     Symbol(Symbol),
     NumberLiteral(f64),
-    BooleanLiteral(bool),
     StringLiteral(&'a str),
 }
 #[derive(Debug, PartialEq)]
@@ -37,10 +43,53 @@ enum Symbol {
     LESS,
 }
 
+#[derive(Debug, PartialEq)]
+enum Reserved {
+    AND,
+    CLASS,
+    ELSE,
+    FALSE,
+    FUN,
+    FOR,
+    IF,
+    NIL,
+    OR,
+    PRINT,
+    RETURN,
+    SUPER,
+    THIS,
+    TRUE,
+    VAR,
+    WHILE,
+}
 /// Parses an identifier from the input string.
 /// Identifiers can start with a letter or underscore, and can contain letters, digits, and underscores.
 fn parse_identifier(input: &str) -> IResult<&str, &str> {
     nom::character::complete::alphanumeric1(input)
+}
+
+fn parse_identifier_or_reserved(input: &str) -> IResult<&str, Token> {
+    let (input, identifier) = parse_identifier(input)?;
+    let reserved = match identifier {
+        "and" => Reserved::AND,
+        "class" => Reserved::CLASS,
+        "else" => Reserved::ELSE,
+        "false" => Reserved::FALSE,
+        "fun" => Reserved::FUN,
+        "for" => Reserved::FOR,
+        "if" => Reserved::IF,
+        "nil" => Reserved::NIL,
+        "or" => Reserved::OR,
+        "print" => Reserved::PRINT,
+        "return" => Reserved::RETURN,
+        "super" => Reserved::SUPER,
+        "this" => Reserved::THIS,
+        "true" => Reserved::TRUE,
+        "var" => Reserved::VAR,
+        "while" => Reserved::WHILE,
+        _ => return Ok((input, Token::Identifier(identifier))),
+    };
+    Ok((input, Token::Reserved(reserved)))
 }
 
 fn parse_symbol(input: &str) -> IResult<&str, Symbol> {
@@ -67,14 +116,17 @@ fn parse_symbol(input: &str) -> IResult<&str, Symbol> {
     ))(input)
 }
 
+fn parse_number(input: &str) -> IResult<&str, f64> {
+    let parse_number = recognize(tuple((digit1, opt(tuple((char('.'), digit1))))));
+    map_res(parse_number, |s: &str| s.parse::<f64>())(input)
+}
 fn parse_token(input: &str) -> IResult<&str, Token> {
     let input = input.trim_start();
     alt((
-        map(parse_identifier, Token::Identifier),
+        parse_identifier_or_reserved,
         map(parse_symbol, Token::Symbol),
-        // map(nom::character::complete::digit1, Token::NumberLiteral),
-        // map(nom::character::complete::bool, Token::BooleanLiteral),
-        // map(nom::character::complete::is_a("\"\""), Token::StringLiteral),
+        map(parse_number, Token::NumberLiteral),
+        // map(<parse string literal>, Token::StringLiteral),
     ))(input)
 }
 
@@ -100,6 +152,14 @@ mod tests {
         let input = "!=";
         let expected = Ok(("", Symbol::BANG_EQUAL));
         let actual = parse_symbol(input);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_parse_number() {
+        let input = "123.456";
+        let expected = Ok(("", 123.456));
+        let actual = parse_number(input);
         assert_eq!(actual, expected);
     }
 }
