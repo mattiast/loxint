@@ -1,13 +1,12 @@
 mod syntax;
 
-use nom::bytes::complete::{take_while, take_while1};
-use nom::character::complete::digit1;
-use nom::combinator::map;
-use nom::{branch::alt, bytes::complete::tag, IResult};
 use nom::{
-    character::complete::char,
-    combinator::{map_res, opt, recognize},
+    branch::alt,
+    bytes::complete::{tag, take_while, take_while1},
+    character::complete::{char, digit1},
+    combinator::{map, map_res, opt, recognize},
     sequence::tuple,
+    IResult,
 };
 fn main() {
     println!("Hello, world!");
