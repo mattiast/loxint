@@ -36,28 +36,25 @@ pub enum BOperator {
 
 impl Expression {
     pub fn pretty_print(&self) -> String {
-        pretty_print_expression(self)
-    }
-}
-fn pretty_print_expression(expression: &Expression) -> String {
-    match expression {
-        Expression::StringLiteral(s) => format!("\"{}\"", s),
-        Expression::NumberLiteral(n) => format!("{}", n),
-        Expression::BooleanLiteral(b) => format!("{}", b),
-        Expression::Unary { operator, right } => {
-            format!("({:?} {})", operator, pretty_print_expression(right))
-        }
-        Expression::Binary {
-            left,
-            operator,
-            right,
-        } => {
-            format!(
-                "({:?} {} {})",
+        match self {
+            Expression::StringLiteral(s) => format!("\"{}\"", s),
+            Expression::NumberLiteral(n) => format!("{}", n),
+            Expression::BooleanLiteral(b) => format!("{}", b),
+            Expression::Unary { operator, right } => {
+                format!("({:?} {})", operator, right.pretty_print())
+            }
+            Expression::Binary {
+                left,
                 operator,
-                pretty_print_expression(left),
-                pretty_print_expression(right)
-            )
+                right,
+            } => {
+                format!(
+                    "({:?} {} {})",
+                    operator,
+                    left.pretty_print(),
+                    right.pretty_print(),
+                )
+            }
         }
     }
 }
@@ -74,7 +71,7 @@ mod tests {
             right: Box::new(Expression::NumberLiteral(2.5)),
         };
         let expected = "(PLUS 1 2.5)";
-        let actual = pretty_print_expression(&expression);
+        let actual = expression.pretty_print();
         assert_eq!(actual, expected);
 
         // an expression with a unary operator and a boolean literal
@@ -83,7 +80,7 @@ mod tests {
             right: Box::new(Expression::BooleanLiteral(true)),
         };
         let expected = "(BANG true)";
-        let actual = pretty_print_expression(&expression);
+        let actual = expression.pretty_print();
         assert_eq!(actual, expected);
     }
 }
