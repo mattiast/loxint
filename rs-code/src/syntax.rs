@@ -1,4 +1,4 @@
-enum Expression {
+pub enum Expression {
     StringLiteral(String),
     NumberLiteral(f64),
     BooleanLiteral(bool),
@@ -14,26 +14,31 @@ enum Expression {
 }
 
 #[derive(Debug)]
-enum UOperator {
+pub enum UOperator {
     MINUS,
     BANG,
 }
 
 #[derive(Debug)]
-enum BOperator {
+pub enum BOperator {
     PLUS,
     MINUS,
     STAR,
     SLASH,
 
-    BANG_EQUAL,
-    EQUAL_EQUAL,
+    BangEqual,
+    EqualEqual,
     LESS,
     GREATER,
-    LESS_EQUAL,
-    GREATER_EQUAL,
+    LessEqual,
+    GreaterEqual,
 }
 
+impl Expression {
+    pub fn pretty_print(&self) -> String {
+        pretty_print_expression(self)
+    }
+}
 fn pretty_print_expression(expression: &Expression) -> String {
     match expression {
         Expression::StringLiteral(s) => format!("\"{}\"", s),

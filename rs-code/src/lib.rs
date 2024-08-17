@@ -1,2 +1,2 @@
-mod scanner;
-mod syntax;
+pub mod scanner;
+pub mod syntax;

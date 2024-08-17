@@ -8,7 +8,7 @@ use nom::{
 };
 
 #[derive(Debug, PartialEq)]
-enum Token<'a> {
+pub enum Token<'a> {
     Identifier(&'a str),
     Reserved(Reserved),
     Symbol(Symbol),
@@ -16,12 +16,12 @@ enum Token<'a> {
     StringLiteral(&'a str),
 }
 #[derive(Debug, PartialEq)]
-enum Symbol {
+pub enum Symbol {
     // Single-character tokens.
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    LEFT_BRACE,
-    RIGHT_BRACE,
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
     COMMA,
     DOT,
     MINUS,
@@ -31,18 +31,18 @@ enum Symbol {
     STAR,
 
     // One or two character tokens.
-    BANG_EQUAL,
+    BangEqual,
     BANG,
-    EQUAL_EQUAL,
+    EqualEqual,
     EQUAL,
-    GREATER_EQUAL,
+    GreaterEqual,
     GREATER,
-    LESS_EQUAL,
+    LessEqual,
     LESS,
 }
 
 #[derive(Debug, PartialEq)]
-enum Reserved {
+pub enum Reserved {
     AND,
     CLASS,
     ELSE,
@@ -106,10 +106,10 @@ fn parse_identifier_or_reserved(input: &str) -> IResult<&str, Token> {
 
 fn parse_symbol(input: &str) -> IResult<&str, Symbol> {
     alt((
-        map(tag("("), |_| Symbol::LEFT_PAREN),
-        map(tag(")"), |_| Symbol::RIGHT_PAREN),
-        map(tag("{"), |_| Symbol::LEFT_BRACE),
-        map(tag("}"), |_| Symbol::RIGHT_BRACE),
+        map(tag("("), |_| Symbol::LeftParen),
+        map(tag(")"), |_| Symbol::RightParen),
+        map(tag("{"), |_| Symbol::LeftBrace),
+        map(tag("}"), |_| Symbol::RightBrace),
         map(tag(","), |_| Symbol::COMMA),
         map(tag("."), |_| Symbol::DOT),
         map(tag("-"), |_| Symbol::MINUS),
@@ -117,13 +117,13 @@ fn parse_symbol(input: &str) -> IResult<&str, Symbol> {
         map(tag(";"), |_| Symbol::SEMICOLON),
         map(tag("/"), |_| Symbol::SLASH),
         map(tag("*"), |_| Symbol::STAR),
-        map(tag("!="), |_| Symbol::BANG_EQUAL),
+        map(tag("!="), |_| Symbol::BangEqual),
         map(tag("!"), |_| Symbol::BANG),
-        map(tag("=="), |_| Symbol::EQUAL_EQUAL),
+        map(tag("=="), |_| Symbol::EqualEqual),
         map(tag("="), |_| Symbol::EQUAL),
-        map(tag(">="), |_| Symbol::GREATER_EQUAL),
+        map(tag(">="), |_| Symbol::GreaterEqual),
         map(tag(">"), |_| Symbol::GREATER),
-        map(tag("<="), |_| Symbol::LESS_EQUAL),
+        map(tag("<="), |_| Symbol::LessEqual),
         map(tag("<"), |_| Symbol::LESS),
     ))(input)
 }
@@ -147,7 +147,7 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
     ))(input)
 }
 
-fn parse_tokens(input: &str) -> IResult<&str, Vec<Token>> {
+pub fn parse_tokens(input: &str) -> IResult<&str, Vec<Token>> {
     let mut tokens = Vec::new();
     let mut input = input.trim_start();
     while !input.is_empty() {
@@ -173,12 +173,12 @@ mod tests {
     #[test]
     fn test_parse_symbol() {
         let input = "(";
-        let expected = Ok(("", Symbol::LEFT_PAREN));
+        let expected = Ok(("", Symbol::LeftParen));
         let actual = parse_symbol(input);
         assert_eq!(actual, expected);
 
         let input = "!=";
-        let expected = Ok(("", Symbol::BANG_EQUAL));
+        let expected = Ok(("", Symbol::BangEqual));
         let actual = parse_symbol(input);
         assert_eq!(actual, expected);
     }
