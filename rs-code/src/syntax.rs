@@ -1,4 +1,5 @@
 pub enum Expression {
+    Nil,
     StringLiteral(String),
     NumberLiteral(f64),
     BooleanLiteral(bool),
@@ -37,6 +38,7 @@ pub enum BOperator {
 impl Expression {
     pub fn pretty_print(&self) -> String {
         match self {
+            Expression::Nil => "nil".to_string(),
             Expression::StringLiteral(s) => format!("\"{}\"", s),
             Expression::NumberLiteral(n) => format!("{}", n),
             Expression::BooleanLiteral(b) => format!("{}", b),
