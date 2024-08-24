@@ -1,6 +1,6 @@
 use crate::{
     scanner::{Reserved, Symbol, Token},
-    syntax::{BOperator, Expression, UOperator},
+    syntax::{BOperator, Expression, Statement, UOperator},
 };
 
 pub struct Parser<'a, 'b> {
@@ -18,6 +18,21 @@ impl<'a, 'b> Parser<'a, 'b> {
     }
     pub fn done(&self) -> bool {
         self.remaining.is_empty()
+    }
+    pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
+        match self.remaining.first() {
+            Some(Token::Reserved(Reserved::PRINT)) => {
+                self.remaining = &self.remaining[1..];
+                let e = self.parse_expr()?;
+                self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+                Ok(Statement::Print(e))
+            }
+            _ => {
+                let e = self.parse_expr()?;
+                self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+                Ok(Statement::Expression(e))
+            }
+        }
     }
     pub fn parse_expr(&mut self) -> Result<Expression, ParseError> {
         self.parse_equality()

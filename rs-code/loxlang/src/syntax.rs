@@ -1,4 +1,10 @@
 #[derive(Debug)]
+pub enum Statement {
+    Expression(Expression),
+    Print(Expression),
+}
+
+#[derive(Debug)]
 pub enum Expression {
     Nil,
     StringLiteral(String),
