@@ -13,6 +13,12 @@ pub enum ParseError {
 }
 
 impl<'a, 'b> Parser<'a, 'b> {
+    pub fn new(tokens: &'a [Token<'b>]) -> Self {
+        Self { remaining: tokens }
+    }
+    pub fn done(&self) -> bool {
+        self.remaining.is_empty()
+    }
     pub fn parse_expr(&mut self) -> Result<Expression, ParseError> {
         self.parse_equality()
     }
