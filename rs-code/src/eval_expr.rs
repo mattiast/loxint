@@ -1,13 +1,16 @@
-use crate::syntax::{BOperator, Expression};
+use crate::syntax::{BOperator, Expression, UOperator};
 
-enum Value {
+#[derive(PartialEq, Debug)]
+pub enum Value {
     Number(f64),
     Boolean(bool),
     String(String),
     Nil,
 }
 
-fn eval(e: &Expression) -> Result<Value, ()> {
+type EvalError = ();
+
+pub fn eval(e: &Expression) -> Result<Value, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
@@ -15,15 +18,12 @@ fn eval(e: &Expression) -> Result<Value, ()> {
         Expression::Nil => Ok(Value::Nil),
         Expression::Unary { operator, right } => {
             let right = eval(right)?;
-            match operator {
-                UOperator::MINUS => match right {
-                    Value::Number(n) => Ok(Value::Number(-n)),
-                    _ => Err(()),
-                },
-                UOperator::BANG => match right {
-                    Value::Boolean(b) => Ok(Value::Boolean(!b)),
-                    _ => Err(()),
-                },
+            match (operator, right) {
+                (UOperator::MINUS, Value::Number(n)) => Ok(Value::Number(-n)),
+                (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
+                (UOperator::BANG, Value::Nil) => Ok(Value::Boolean(true)),
+                // TODO Truthiness?
+                _ => Err(()),
             }
         }
         Expression::Binary {
@@ -35,6 +35,7 @@ fn eval(e: &Expression) -> Result<Value, ()> {
             let right = eval(right)?;
             match (left, operator, right) {
                 (Value::Number(l), BOperator::PLUS, Value::Number(r)) => Ok(Value::Number(l + r)),
+                (Value::String(l), BOperator::PLUS, Value::String(r)) => Ok(Value::String(l + &r)),
                 (Value::Number(l), BOperator::MINUS, Value::Number(r)) => Ok(Value::Number(l - r)),
                 (Value::Number(l), BOperator::STAR, Value::Number(r)) => Ok(Value::Number(l * r)),
                 (Value::Number(l), BOperator::SLASH, Value::Number(r)) => Ok(Value::Number(l / r)), // div by zero?
@@ -48,6 +49,9 @@ fn eval(e: &Expression) -> Result<Value, ()> {
                 (Value::Number(l), BOperator::GreaterEqual, Value::Number(r)) => {
                     Ok(Value::Boolean(l >= r))
                 }
+                (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
+                (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
+                _ => Err(()),
             }
         }
     }
