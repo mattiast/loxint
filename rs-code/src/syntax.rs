@@ -13,6 +13,9 @@ pub enum Expression {
         operator: BOperator,
         right: Box<Expression>,
     },
+    // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
+    // TODO Should there be some link to where this was defined in the source?
+    // Generic annotation for each node?
 }
 
 #[derive(Debug)]
