@@ -1,6 +1,8 @@
-use crate::syntax::{BOperator, Expression, UOperator};
+use std::collections::HashMap;
 
-#[derive(PartialEq, Debug)]
+use crate::syntax::{BOperator, Expression, UOperator, VarName};
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
@@ -10,14 +12,22 @@ pub enum Value {
 
 type EvalError = ();
 
-pub fn eval(e: &Expression) -> Result<Value, EvalError> {
+pub struct EvalEnv {
+    pub values: HashMap<VarName, Value>,
+}
+
+pub fn eval(e: &Expression, env: &EvalEnv) -> Result<Value, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
         Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
         Expression::Nil => Ok(Value::Nil),
+        Expression::Identifier(VarName(s)) => match env.values.get(&VarName(s.to_string())) {
+            Some(v) => Ok(v.clone()),
+            None => Err(()),
+        },
         Expression::Unary { operator, right } => {
-            let right = eval(right)?;
+            let right = eval(right, env)?;
             match (operator, right) {
                 (UOperator::MINUS, Value::Number(n)) => Ok(Value::Number(-n)),
                 (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
@@ -31,8 +41,8 @@ pub fn eval(e: &Expression) -> Result<Value, EvalError> {
             operator,
             right,
         } => {
-            let left = eval(left)?;
-            let right = eval(right)?;
+            let left = eval(left, env)?;
+            let right = eval(right, env)?;
             match (left, operator, right) {
                 (Value::Number(l), BOperator::PLUS, Value::Number(r)) => Ok(Value::Number(l + r)),
                 (Value::String(l), BOperator::PLUS, Value::String(r)) => Ok(Value::String(l + &r)),

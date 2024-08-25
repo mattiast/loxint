@@ -4,7 +4,7 @@ pub enum Statement {
     Print(Expression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 pub struct VarName(pub String);
 
 #[derive(Debug)]
