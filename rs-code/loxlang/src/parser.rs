@@ -76,6 +76,10 @@ impl<'a, 'b> Parser<'a, 'b> {
     fn parse_primary(&mut self) -> Result<Expression, ParseError> {
         match self.remaining.first() {
             Some(Token::Symbol(Symbol::LeftParen)) => self.parse_grouping(),
+            Some(Token::Identifier(id)) => {
+                self.remaining = &self.remaining[1..];
+                Ok(Expression::Identifier(VarName(id.to_string())))
+            }
             Some(Token::NumberLiteral(n)) => {
                 self.remaining = &self.remaining[1..];
                 Ok(Expression::NumberLiteral(*n))
