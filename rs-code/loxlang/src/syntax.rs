@@ -5,11 +5,25 @@ pub enum Statement {
 }
 
 #[derive(Debug)]
+pub struct VarName(pub String);
+
+#[derive(Debug)]
+pub enum Declaration {
+    Var(VarName, Option<Expression>),
+    Statement(Statement),
+}
+
+pub struct Program {
+    pub decls: Vec<Declaration>,
+}
+
+#[derive(Debug)]
 pub enum Expression {
     Nil,
     StringLiteral(String),
     NumberLiteral(f64),
     BooleanLiteral(bool),
+    Identifier(VarName),
     Unary {
         operator: UOperator,
         right: Box<Expression>,
@@ -52,6 +66,7 @@ impl Expression {
             Expression::StringLiteral(s) => format!("\"{}\"", s),
             Expression::NumberLiteral(n) => format!("{}", n),
             Expression::BooleanLiteral(b) => format!("{}", b),
+            Expression::Identifier(VarName(s)) => format!("{}", s),
             Expression::Unary { operator, right } => {
                 format!("({:?} {})", operator, right.pretty_print())
             }

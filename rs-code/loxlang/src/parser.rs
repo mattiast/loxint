@@ -1,6 +1,6 @@
 use crate::{
     scanner::{Reserved, Symbol, Token},
-    syntax::{BOperator, Expression, Statement, UOperator},
+    syntax::{BOperator, Declaration, Expression, Program, Statement, UOperator, VarName},
 };
 
 pub struct Parser<'a, 'b> {
@@ -32,6 +32,34 @@ impl<'a, 'b> Parser<'a, 'b> {
                 self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
                 Ok(Statement::Expression(e))
             }
+        }
+    }
+    pub fn parse_program(&mut self) -> Result<Program, ParseError> {
+        let mut decls = Vec::new();
+        while !self.done() {
+            decls.push(self.parse_declaration()?);
+        }
+        Ok(Program { decls })
+    }
+    fn parse_declaration(&mut self) -> Result<Declaration, ParseError> {
+        match self.remaining.first() {
+            Some(Token::Reserved(Reserved::VAR)) => {
+                self.remaining = &self.remaining[1..];
+                let name = self.parse_identifier()?;
+                match self.remaining.first() {
+                    Some(Token::Symbol(Symbol::EQUAL)) => {
+                        self.remaining = &self.remaining[1..];
+                        let e = self.parse_expr()?;
+                        self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+                        Ok(Declaration::Var(name, Some(e)))
+                    }
+                    _ => {
+                        self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+                        Ok(Declaration::Var(name, None))
+                    }
+                }
+            }
+            _ => self.parse_statement().map(Declaration::Statement),
         }
     }
     pub fn parse_expr(&mut self) -> Result<Expression, ParseError> {
@@ -221,6 +249,16 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
         Ok(left)
+    }
+
+    fn parse_identifier(&mut self) -> Result<VarName, ParseError> {
+        match self.remaining.first() {
+            Some(Token::Identifier(s)) => {
+                self.remaining = &self.remaining[1..];
+                Ok(VarName(s.to_string()))
+            }
+            _ => Err(ParseError::Bad),
+        }
     }
     fn consume(&mut self, string: &[Token<'b>]) -> Result<(), ParseError> {
         let x = self.remaining.starts_with(string);
