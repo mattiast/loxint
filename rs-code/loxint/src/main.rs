@@ -19,5 +19,8 @@ fn main() {
         eprintln!("Unparsed tokens");
     }
     println!("{:?}", e);
-    println!("{:?}", loxlang::eval_expr::eval(&e));
+    let env = rs_code::eval_expr::EvalEnv {
+        values: std::collections::HashMap::new(),
+    };
+    println!("{:?}", loxlang::eval_expr::eval(&e, &env));
 }
