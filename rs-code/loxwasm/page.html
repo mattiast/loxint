@@ -1,0 +1,23 @@
+
+<input id="code"  cols="80" type="text"></input>
+<br>
+<button id="executeButton">Execute Code</button>
+<br>
+<textarea id="output" rows="10" cols="80" readonly></textarea>
+
+<script type="module">
+import init, { evalexpr } from "./loxwasm.js";
+
+await init();
+document.getElementById('executeButton').addEventListener('click', executeCode);
+
+function executeCode() {
+    const code = document.getElementById('code').value;
+    try {
+        const result = evalexpr(code);
+        document.getElementById('output').value = "Result: " + result;
+    } catch (error) {
+        document.getElementById('output').value = "Error: " + error;
+    }
+}
+</script>

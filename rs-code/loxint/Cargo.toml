@@ -1,0 +1,8 @@
+[package]
+name = "loxint"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+loxlang = { path = "../loxlang"}
+clap = { version = "4.5.16", features = ["derive"] }
