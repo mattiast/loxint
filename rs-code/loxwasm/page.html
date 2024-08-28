@@ -1,5 +1,5 @@
 
-<input id="code"  cols="80" type="text"></input>
+<input id="code" cols="80" type="text" autofocus></input>
 <br>
 <button id="executeButton">Execute Code</button>
 <br>
@@ -10,6 +10,12 @@ import init, { evalexpr } from "./loxwasm.js";
 
 await init();
 document.getElementById('executeButton').addEventListener('click', executeCode);
+document.getElementById('code').addEventListener('keypress', function(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        executeCode();
+    }
+});
 
 function executeCode() {
     const code = document.getElementById('code').value;
