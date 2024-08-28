@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::syntax::{BOperator, Expression, UOperator, VarName};
+use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator, VarName};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Value {
@@ -63,6 +63,26 @@ pub fn eval(e: &Expression, env: &EvalEnv) -> Result<Value, EvalError> {
                 (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
                 _ => Err(()),
             }
+        }
+    }
+}
+
+pub fn run_statement(s: &Declaration, env: &mut EvalEnv) -> Result<(), EvalError> {
+    match s {
+        Declaration::Statement(Statement::Expression(e)) => {
+            let _ = eval(e, env)?;
+            Ok(())
+        }
+        Declaration::Statement(Statement::Print(e)) => {
+            let v = eval(e, env)?;
+            // TODO print should use dependency injection from "execution environment"
+            println!("{:?}", v);
+            Ok(())
+        }
+        Declaration::Var(s, e) => {
+            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env)?;
+            env.values.insert(s.clone(), v);
+            Ok(())
         }
     }
 }
