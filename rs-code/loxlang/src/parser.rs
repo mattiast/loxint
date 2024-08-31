@@ -63,7 +63,24 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
     pub fn parse_expr(&mut self) -> Result<Expression, ParseError> {
-        self.parse_equality()
+        self.parse_assignment()
+    }
+    fn parse_assignment(&mut self) -> Result<Expression, ParseError> {
+        let left = self.parse_equality()?;
+
+        if self.remaining.first() == Some(&Token::Symbol(Symbol::EQUAL)) {
+            self.consume(&[Token::Symbol(Symbol::EQUAL)])?;
+            let right = self.parse_assignment()?;
+            match left {
+                Expression::Identifier(v) => {
+                    let e = Expression::Assignment(v, Box::new(right));
+                    Ok(e)
+                }
+                _ => Err(ParseError::Bad), // LHS of an assignment must be a variable
+            }
+        } else {
+            Ok(left)
+        }
     }
 
     fn parse_grouping(&mut self) -> Result<Expression, ParseError> {

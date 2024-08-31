@@ -33,6 +33,7 @@ pub enum Expression {
         operator: BOperator,
         right: Box<Expression>,
     },
+    Assignment(VarName, Box<Expression>),
     // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
     // TODO Should there be some link to where this was defined in the source?
     // Generic annotation for each node?
@@ -82,6 +83,7 @@ impl Expression {
                     right.pretty_print(),
                 )
             }
+            Expression::Assignment(VarName(s), e) => format!("(SET {} {})", s, e.pretty_print()),
         }
     }
 }

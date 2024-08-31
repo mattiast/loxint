@@ -16,7 +16,7 @@ pub struct EvalEnv {
     pub values: HashMap<VarName, Value>,
 }
 
-pub fn eval(e: &Expression, env: &EvalEnv) -> Result<Value, EvalError> {
+pub fn eval(e: &Expression, env: &mut EvalEnv) -> Result<Value, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
@@ -62,6 +62,16 @@ pub fn eval(e: &Expression, env: &EvalEnv) -> Result<Value, EvalError> {
                 (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
                 (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
                 _ => Err(()),
+            }
+        }
+        Expression::Assignment(name, value) => {
+            let val = eval(value, env)?;
+            if let Some(value_ref) = env.values.get_mut(name) {
+                // TODO Can we do something to avoid clone?
+                *value_ref = val.clone();
+                Ok(val)
+            } else {
+                Err(()) // Undefined variable
             }
         }
     }

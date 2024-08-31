@@ -38,10 +38,10 @@ fn main() {
                 eprintln!("Unparsed tokens");
             }
             println!("{:?}", e);
-            let env = loxlang::eval_expr::EvalEnv {
+            let mut env = loxlang::eval_expr::EvalEnv {
                 values: std::collections::HashMap::new(),
             };
-            println!("{:?}", loxlang::eval_expr::eval(&e, &env));
+            println!("{:?}", loxlang::eval_expr::eval(&e, &mut env));
         }
     }
 }
