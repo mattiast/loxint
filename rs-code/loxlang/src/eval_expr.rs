@@ -67,6 +67,8 @@ impl<'a> Stack<'a> {
         self.stack.last_mut().unwrap().set(name, value);
     }
 }
+// TODO add a type/trait for "execution environment", which has stack operations, and operations for print/clock
+// Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
 pub fn eval<'a>(e: &Expression<'a>, stack: &mut Stack<'a>) -> Result<Value, EvalError> {
     match e {
@@ -141,6 +143,14 @@ pub fn run_statement<'a>(s: &Declaration<'a>, stack: &mut Stack<'a>) -> Result<(
         Declaration::Var(s, e) => {
             let v = eval(e.as_ref().unwrap_or(&Expression::Nil), stack)?;
             stack.declare(s.clone(), v);
+            Ok(())
+        }
+        Declaration::Statement(Statement::Block(decls)) => {
+            stack.stack.push(EvalEnv::new_global_env()); // TODO lol rename
+            for d in decls {
+                run_statement(d, stack)?;
+            }
+            stack.stack.pop();
             Ok(())
         }
     }
