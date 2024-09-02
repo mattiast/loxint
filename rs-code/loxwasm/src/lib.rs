@@ -27,9 +27,7 @@ pub fn evalexpr(src: String) -> Result<f64, LoxError> {
     if !p.done() {
         return Err(LoxError("Unparsed tokens remaining".to_string()));
     }
-    let mut env = loxlang::eval_expr::EvalEnv {
-        values: std::collections::HashMap::new(),
-    };
+    let mut env = loxlang::eval_expr::EvalEnv::new_global_env();
     match loxlang::eval_expr::eval(&e, &mut env) {
         Ok(Value::Number(x)) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),

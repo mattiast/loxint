@@ -13,7 +13,15 @@ pub enum Value {
 type EvalError = ();
 
 pub struct EvalEnv<'a> {
-    pub values: HashMap<VarName<'a>, Value>,
+    values: HashMap<VarName<'a>, Value>,
+}
+
+impl EvalEnv<'_> {
+    pub fn new_global_env() -> Self {
+        Self {
+            values: HashMap::new(),
+        }
+    }
 }
 
 pub fn eval<'a>(e: &Expression<'a>, env: &mut EvalEnv<'a>) -> Result<Value, EvalError> {
