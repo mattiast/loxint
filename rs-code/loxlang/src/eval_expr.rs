@@ -12,17 +12,17 @@ pub enum Value {
 
 type EvalError = ();
 
-pub struct EvalEnv {
-    pub values: HashMap<VarName, Value>,
+pub struct EvalEnv<'a> {
+    pub values: HashMap<VarName<'a>, Value>,
 }
 
-pub fn eval(e: &Expression, env: &mut EvalEnv) -> Result<Value, EvalError> {
+pub fn eval<'a>(e: &Expression<'a>, env: &mut EvalEnv<'a>) -> Result<Value, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
         Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
         Expression::Nil => Ok(Value::Nil),
-        Expression::Identifier(VarName(s)) => match env.values.get(&VarName(s.to_string())) {
+        Expression::Identifier(VarName(s)) => match env.values.get(&VarName(s)) {
             Some(v) => Ok(v.clone()),
             None => Err(()),
         },
@@ -77,7 +77,7 @@ pub fn eval(e: &Expression, env: &mut EvalEnv) -> Result<Value, EvalError> {
     }
 }
 
-pub fn run_statement(s: &Declaration, env: &mut EvalEnv) -> Result<(), EvalError> {
+pub fn run_statement<'a>(s: &Declaration<'a>, env: &mut EvalEnv<'a>) -> Result<(), EvalError> {
     match s {
         Declaration::Statement(Statement::Expression(e)) => {
             let _ = eval(e, env)?;
