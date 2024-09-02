@@ -1,39 +1,39 @@
 #[derive(Debug)]
-pub enum Statement {
-    Expression(Expression),
-    Print(Expression),
+pub enum Statement<'a> {
+    Expression(Expression<'a>),
+    Print(Expression<'a>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct VarName(pub String);
+pub struct VarName<'a>(pub &'a str);
 
 #[derive(Debug)]
-pub enum Declaration {
-    Var(VarName, Option<Expression>),
-    Statement(Statement),
+pub enum Declaration<'a> {
+    Var(VarName<'a>, Option<Expression<'a>>),
+    Statement(Statement<'a>),
 }
 
-pub struct Program {
-    pub decls: Vec<Declaration>,
+pub struct Program<'a> {
+    pub decls: Vec<Declaration<'a>>,
 }
 
 #[derive(Debug)]
-pub enum Expression {
+pub enum Expression<'a> {
     Nil,
     StringLiteral(String),
     NumberLiteral(f64),
     BooleanLiteral(bool),
-    Identifier(VarName),
+    Identifier(VarName<'a>),
     Unary {
         operator: UOperator,
-        right: Box<Expression>,
+        right: Box<Expression<'a>>,
     },
     Binary {
-        left: Box<Expression>,
+        left: Box<Expression<'a>>,
         operator: BOperator,
-        right: Box<Expression>,
+        right: Box<Expression<'a>>,
     },
-    Assignment(VarName, Box<Expression>),
+    Assignment(VarName<'a>, Box<Expression<'a>>),
     // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
     // TODO Should there be some link to where this was defined in the source?
     // Generic annotation for each node?
@@ -60,7 +60,7 @@ pub enum BOperator {
     GreaterEqual,
 }
 
-impl Expression {
+impl<'a> Expression<'a> {
     pub fn pretty_print(&self) -> String {
         match self {
             Expression::Nil => "nil".to_string(),

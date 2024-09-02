@@ -12,14 +12,17 @@ pub enum ParseError {
     Bad,
 }
 
-impl<'a, 'b> Parser<'a, 'b> {
-    pub fn new(tokens: &'a [Token<'b>]) -> Self {
+impl<'list, 'src> Parser<'list, 'src>
+where
+    'src: 'list,
+{
+    pub fn new(tokens: &'list [Token<'src>]) -> Self {
         Self { remaining: tokens }
     }
     pub fn done(&self) -> bool {
         self.remaining.is_empty()
     }
-    pub fn parse_statement(&mut self) -> Result<Statement, ParseError> {
+    pub fn parse_statement(&mut self) -> Result<Statement<'src>, ParseError> {
         match self.remaining.first() {
             Some(Token::Reserved(Reserved::PRINT)) => {
                 self.remaining = &self.remaining[1..];
@@ -34,14 +37,14 @@ impl<'a, 'b> Parser<'a, 'b> {
             }
         }
     }
-    pub fn parse_program(&mut self) -> Result<Program, ParseError> {
+    pub fn parse_program(&mut self) -> Result<Program<'src>, ParseError> {
         let mut decls = Vec::new();
         while !self.done() {
             decls.push(self.parse_declaration()?);
         }
         Ok(Program { decls })
     }
-    fn parse_declaration(&mut self) -> Result<Declaration, ParseError> {
+    fn parse_declaration(&mut self) -> Result<Declaration<'src>, ParseError> {
         match self.remaining.first() {
             Some(Token::Reserved(Reserved::VAR)) => {
                 self.remaining = &self.remaining[1..];
@@ -62,10 +65,10 @@ impl<'a, 'b> Parser<'a, 'b> {
             _ => self.parse_statement().map(Declaration::Statement),
         }
     }
-    pub fn parse_expr(&mut self) -> Result<Expression, ParseError> {
+    pub fn parse_expr(&mut self) -> Result<Expression<'src>, ParseError> {
         self.parse_assignment()
     }
-    fn parse_assignment(&mut self) -> Result<Expression, ParseError> {
+    fn parse_assignment(&mut self) -> Result<Expression<'src>, ParseError> {
         let left = self.parse_equality()?;
 
         if self.remaining.first() == Some(&Token::Symbol(Symbol::EQUAL)) {
@@ -83,19 +86,19 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn parse_grouping(&mut self) -> Result<Expression, ParseError> {
+    fn parse_grouping(&mut self) -> Result<Expression<'src>, ParseError> {
         self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
         let e = self.parse_expr()?;
         self.consume(&[Token::Symbol(Symbol::RightParen)])?;
         Ok(e)
     }
 
-    fn parse_primary(&mut self) -> Result<Expression, ParseError> {
+    fn parse_primary(&mut self) -> Result<Expression<'src>, ParseError> {
         match self.remaining.first() {
             Some(Token::Symbol(Symbol::LeftParen)) => self.parse_grouping(),
             Some(Token::Identifier(id)) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::Identifier(VarName(id.to_string())))
+                Ok(Expression::Identifier(VarName(id)))
             }
             Some(Token::NumberLiteral(n)) => {
                 self.remaining = &self.remaining[1..];
@@ -121,7 +124,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn parse_unary(&mut self) -> Result<Expression, ParseError> {
+    fn parse_unary(&mut self) -> Result<Expression<'src>, ParseError> {
         let operator = match self.remaining.first() {
             Some(Token::Symbol(Symbol::MINUS)) => {
                 self.remaining = &self.remaining[1..];
@@ -145,7 +148,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
     }
 
-    fn parse_factor(&mut self) -> Result<Expression, ParseError> {
+    fn parse_factor(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_unary()?;
         loop {
             match self.remaining.first() {
@@ -172,7 +175,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         Ok(left)
     }
-    fn parse_term(&mut self) -> Result<Expression, ParseError> {
+    fn parse_term(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_factor()?;
         loop {
             match self.remaining.first() {
@@ -199,7 +202,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         Ok(left)
     }
-    fn parse_comparison(&mut self) -> Result<Expression, ParseError> {
+    fn parse_comparison(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_term()?;
         loop {
             match self.remaining.first() {
@@ -244,7 +247,7 @@ impl<'a, 'b> Parser<'a, 'b> {
         }
         Ok(left)
     }
-    fn parse_equality(&mut self) -> Result<Expression, ParseError> {
+    fn parse_equality(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_comparison()?;
         loop {
             match self.remaining.first() {
@@ -272,16 +275,16 @@ impl<'a, 'b> Parser<'a, 'b> {
         Ok(left)
     }
 
-    fn parse_identifier(&mut self) -> Result<VarName, ParseError> {
+    fn parse_identifier(&mut self) -> Result<VarName<'src>, ParseError> {
         match self.remaining.first() {
             Some(Token::Identifier(s)) => {
                 self.remaining = &self.remaining[1..];
-                Ok(VarName(s.to_string()))
+                Ok(VarName(s))
             }
             _ => Err(ParseError::Bad),
         }
     }
-    fn consume(&mut self, string: &[Token<'b>]) -> Result<(), ParseError> {
+    fn consume(&mut self, string: &[Token<'src>]) -> Result<(), ParseError> {
         let x = self.remaining.starts_with(string);
         if !x {
             Err(ParseError::Bad)
