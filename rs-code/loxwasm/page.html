@@ -5,8 +5,23 @@
 <br>
 <textarea id="output" rows="10" cols="80" readonly></textarea>
 
+<hr>
+
+<textarea id="multiLineCode" rows="10" cols="80">
+var a = 1;
+while (a < 10) {
+    print a;
+    a = a + 1;
+}
+</textarea>
+<br>
+<button id="executeMultiLineButton">Execute Multi-Line Code</button>
+<br>
+<textarea id="multiLineOutput" rows="10" cols="80" readonly></textarea>
+
+
 <script type="module">
-import init, { evalexpr } from "./loxwasm.js";
+import init, { eval_expr, run_program } from "./loxwasm.js";
 
 await init();
 document.getElementById('executeButton').addEventListener('click', executeCode);
@@ -20,10 +35,24 @@ document.getElementById('code').addEventListener('keypress', function(event) {
 function executeCode() {
     const code = document.getElementById('code').value;
     try {
-        const result = evalexpr(code);
+        const result = eval_expr(code);
         document.getElementById('output').value = "Result: " + result;
     } catch (error) {
         document.getElementById('output').value = "Error: " + error;
     }
 }
+
+document.getElementById('executeMultiLineButton').addEventListener('click', executeMultiLineCode);
+
+function executeMultiLineCode() {
+    const code = document.getElementById('multiLineCode').value;
+    try {
+        const result = run_program(code);
+        // Iterate over the array of strings, and join them with newlines
+        document.getElementById('multiLineOutput').value = result.join('\n');
+    } catch (error) {
+        document.getElementById('multiLineOutput').value = "Error: " + error;
+    }
+}
+
 </script>
