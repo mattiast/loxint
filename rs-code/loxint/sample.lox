@@ -1,5 +1,8 @@
+
 var a = "hi";
 var b = 3;
 7;
+{
 print a;
 print b+1;
+}

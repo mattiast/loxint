@@ -27,8 +27,8 @@ pub fn evalexpr(src: String) -> Result<f64, LoxError> {
     if !p.done() {
         return Err(LoxError("Unparsed tokens remaining".to_string()));
     }
-    let mut env = loxlang::eval_expr::EvalEnv::new_global_env();
-    match loxlang::eval_expr::eval(&e, &mut env) {
+    let mut stack = loxlang::eval_expr::Stack::new();
+    match loxlang::eval_expr::eval(&e, &mut stack) {
         Ok(Value::Number(x)) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),
         Ok(Value::Boolean(_)) | Ok(Value::String(_)) | Ok(Value::Nil) => Err(LoxError(
