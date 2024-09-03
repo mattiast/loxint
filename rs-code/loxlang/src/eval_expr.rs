@@ -96,3 +96,57 @@ pub fn run_statement<'src>(
         }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    use crate::execution_env::Deps;
+    use crate::execution_env::ExecEnv;
+    use crate::parser;
+    use crate::scanner::parse_tokens;
+
+    use super::*;
+    struct TestDeps {
+        printed: Arc<Mutex<Vec<Value>>>,
+    }
+    impl Deps for TestDeps {
+        fn print(&mut self, v: Value) {
+            self.printed.lock().unwrap().push(v);
+        }
+        fn clock(&mut self) -> f64 {
+            0.0
+        }
+    }
+
+    #[test]
+    fn run_program() {
+        let printed = Arc::new(Mutex::new(Vec::new()));
+        let deps = TestDeps {
+            printed: printed.clone(),
+        };
+        let mut env = ExecEnv::new(Box::new(deps));
+        // Define program as a multiline string, and parse it
+        let source = r#"
+            var a = "hi";
+            var b = 3;
+            7;
+            {
+            print a;
+            print b+1;
+            }
+        "#;
+        let (rest, tokens) = parse_tokens(source).unwrap();
+        assert_eq!(rest, "");
+        let mut parser = parser::Parser::new(&tokens);
+        let program = parser.parse_program().unwrap();
+        for stmt in program.decls {
+            run_statement(&stmt, &mut env).unwrap();
+        }
+        assert_eq!(
+            *printed.lock().unwrap(),
+            vec![Value::String("hi".to_string()), Value::Number(4.0)]
+        );
+    }
+}
