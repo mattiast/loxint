@@ -1,5 +1,5 @@
 use crate::syntax::VarName;
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Value {
@@ -31,38 +31,51 @@ impl<'a> EvalEnv<'a> {
     }
 }
 
-pub enum Stack<'src, 'scope> {
-    GlobalEnv(EvalEnv<'src>),
-    LocalEnv(EvalEnv<'src>, &'scope mut Stack<'src, 'scope>),
+pub struct Stack<'src> {
+    env: EvalEnv<'src>,
+    parent: Option<Box<Stack<'src>>>,
 }
-impl<'src, 'scope> Stack<'src, 'scope> {
+impl<'src> Stack<'src> {
     pub fn new() -> Self {
-        Self::GlobalEnv(EvalEnv::new())
+        Self {
+            env: EvalEnv::new(),
+            parent: None,
+        }
     }
     pub fn get_env<'a>(&'a self) -> &'a EvalEnv<'src> {
-        match self {
-            Self::GlobalEnv(e) => e,
-            Self::LocalEnv(e, _) => e,
-        }
+        &self.env
     }
     pub fn get_mut_env<'a>(&'a mut self) -> &'a mut EvalEnv<'src> {
-        match self {
-            Self::GlobalEnv(e) => e,
-            Self::LocalEnv(e, _) => e,
-        }
+        &mut self.env
     }
-    pub fn run_in_local_env<F>(&'scope mut self, f: F)
+    pub fn run_in_local_env<F, U>(&mut self, f: F) -> U
     where
-        F: FnOnce(&mut Stack<'src, '_>) -> (),
+        F: FnOnce(&mut Stack<'src>) -> U,
     {
-        let mut x = Self::LocalEnv(EvalEnv::new(), self);
-        f(&mut x);
-        todo!()
+        // TODO this is screaming for RAII
+        self.go_to_local_env();
+        let v = f(self);
+        self.go_to_parent_env();
+        v
+    }
+    fn go_to_local_env(&mut self) {
+        // No huh huh
+        // TODO make this less awful
+        let old = mem::replace(self, Self::new());
+        let new = Self {
+            env: EvalEnv::new(),
+            parent: Some(Box::new(old)),
+        };
+        *self = new;
+    }
+    fn go_to_parent_env(&mut self) {
+        // No huh huh
+        *self = *self.parent.take().unwrap();
     }
     pub fn lookup(&self, name: &VarName<'src>) -> Option<Value> {
         if let Some(x) = self.get_env().lookup(name) {
             Some(x)
-        } else if let Self::LocalEnv(_, parent) = self {
+        } else if let Some(parent) = self.parent.as_ref() {
             parent.lookup(name)
         } else {
             None
@@ -72,7 +85,7 @@ impl<'src, 'scope> Stack<'src, 'scope> {
         if self.get_env().is_defined(&name) {
             self.get_mut_env().set(name, value);
             Ok(())
-        } else if let Self::LocalEnv(_, parent) = self {
+        } else if let Some(parent) = self.parent.as_mut() {
             parent.assign(name, value)
         } else {
             Err(NotFound)

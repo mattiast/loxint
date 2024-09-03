@@ -9,7 +9,7 @@ type EvalError = ();
 
 pub fn eval<'src, 'scope>(
     e: &Expression<'src>,
-    stack: &mut Stack<'src, 'scope>,
+    stack: &mut Stack<'src>,
 ) -> Result<Value, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
@@ -68,13 +68,10 @@ pub fn eval<'src, 'scope>(
     }
 }
 
-pub fn run_statement<'a, 'src, 'scope>(
+pub fn run_statement<'src>(
     s: &Declaration<'src>,
-    stack: &'scope mut Stack<'src, 'scope>,
-) -> Result<(), EvalError>
-where
-    'a: 'scope,
-{
+    stack: &mut Stack<'src>,
+) -> Result<(), EvalError> {
     match s {
         Declaration::Statement(Statement::Expression(e)) => {
             let _ = eval(e, stack)?;
@@ -91,14 +88,11 @@ where
             stack.declare(s.clone(), v);
             Ok(())
         }
-        Declaration::Statement(Statement::Block(decls)) => {
-            stack.run_in_local_env(|stack| {
-                for d in decls {
-                    // TODO error handling?
-                    run_statement(d, stack);
-                }
-            });
+        Declaration::Statement(Statement::Block(decls)) => stack.run_in_local_env(|stack| {
+            for d in decls {
+                run_statement(d, stack)?;
+            }
             Ok(())
-        }
+        }),
     }
 }

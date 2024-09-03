@@ -15,7 +15,7 @@ fn main() {
             assert_eq!(rest, "");
             let mut parser = parser::Parser::new(&tokens);
             let program = parser.parse_program().unwrap();
-            let mut stack = loxlang::eval_expr::Stack::new();
+            let mut stack = loxlang::execution_env::Stack::new();
             for stmt in program.decls {
                 run_statement(&stmt, &mut stack).unwrap();
             }
@@ -36,7 +36,7 @@ fn main() {
                 eprintln!("Unparsed tokens");
             }
             println!("{:?}", e);
-            let mut stack = loxlang::eval_expr::Stack::new();
+            let mut stack = loxlang::execution_env::Stack::new();
             println!("{:?}", loxlang::eval_expr::eval(&e, &mut stack));
         }
     }
