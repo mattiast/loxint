@@ -51,26 +51,14 @@ impl<'src, 'scope> Stack<'src, 'scope> {
             Self::LocalEnv(e, _) => e,
         }
     }
-    pub fn create_local_env<'a>(&'a mut self) -> Stack<'src, 'a>
+    pub fn run_in_local_env<F>(&'scope mut self, f: F)
     where
-        'scope: 'a,
+        F: FnOnce(&mut Stack<'src, '_>) -> (),
     {
-        Self::LocalEnv(EvalEnv::new(), self)
+        let mut x = Self::LocalEnv(EvalEnv::new(), self);
+        f(&mut x);
+        todo!()
     }
-    pub fn increase_scope<'a>(&'a mut self) -> &'a mut Stack<'src, 'a>
-    where
-        //'scope: 'a,
-        'a: 'scope,
-    {
-        self
-    }
-    // pub fn reduce_scope<'a, 'b>(&'b mut self) -> &'b mut Stack<'src, 'a>
-    // where
-    //     'scope: 'a,
-    //     // 'a: 'scope,
-    // {
-    //     self
-    // }
     pub fn lookup(&self, name: &VarName<'src>) -> Option<Value> {
         if let Some(x) = self.get_env().lookup(name) {
             Some(x)

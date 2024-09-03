@@ -70,10 +70,10 @@ pub fn eval<'src, 'scope>(
 
 pub fn run_statement<'a, 'src, 'scope>(
     s: &Declaration<'src>,
-    stack: &'a mut Stack<'src, 'scope>,
+    stack: &'scope mut Stack<'src, 'scope>,
 ) -> Result<(), EvalError>
 where
-    'scope: 'a,
+    'a: 'scope,
 {
     match s {
         Declaration::Statement(Statement::Expression(e)) => {
@@ -92,11 +92,12 @@ where
             Ok(())
         }
         Declaration::Statement(Statement::Block(decls)) => {
-            let mut new_stack: Stack<'src, '_> = stack.create_local_env();
-            for d in decls {
-                run_statement(d, &mut new_stack)?;
-            }
-            drop(new_stack);
+            stack.run_in_local_env(|stack| {
+                for d in decls {
+                    // TODO error handling?
+                    run_statement(d, stack);
+                }
+            });
             Ok(())
         }
     }
