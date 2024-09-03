@@ -1,4 +1,4 @@
-use loxlang::eval_expr::Value;
+use loxlang::execution_env::Value;
 use loxlang::parser;
 use loxlang::scanner;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -27,10 +27,8 @@ pub fn evalexpr(src: String) -> Result<f64, LoxError> {
     if !p.done() {
         return Err(LoxError("Unparsed tokens remaining".to_string()));
     }
-    let mut env = loxlang::eval_expr::EvalEnv {
-        values: std::collections::HashMap::new(),
-    };
-    match loxlang::eval_expr::eval(&e, &mut env) {
+    let mut stack = loxlang::execution_env::Stack::new();
+    match loxlang::eval_expr::eval(&e, &mut stack) {
         Ok(Value::Number(x)) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),
         Ok(Value::Boolean(_)) | Ok(Value::String(_)) | Ok(Value::Nil) => Err(LoxError(

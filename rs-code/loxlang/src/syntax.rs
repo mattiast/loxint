@@ -2,6 +2,7 @@
 pub enum Statement<'a> {
     Expression(Expression<'a>),
     Print(Expression<'a>),
+    Block(Vec<Declaration<'a>>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

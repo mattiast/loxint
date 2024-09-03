@@ -30,6 +30,18 @@ where
                 self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
                 Ok(Statement::Print(e))
             }
+            Some(Token::Symbol(Symbol::LeftBrace)) => {
+                self.remaining = &self.remaining[1..];
+                let mut decls = Vec::new();
+                while !self.done() {
+                    if self.remaining.first() == Some(&Token::Symbol(Symbol::RightBrace)) {
+                        self.remaining = &self.remaining[1..];
+                        break;
+                    }
+                    decls.push(self.parse_declaration()?);
+                }
+                Ok(Statement::Block(decls))
+            }
             _ => {
                 let e = self.parse_expr()?;
                 self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
