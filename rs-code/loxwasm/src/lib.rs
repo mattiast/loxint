@@ -1,4 +1,4 @@
-use loxlang::eval_expr::Value;
+use loxlang::execution_env::Value;
 use loxlang::parser;
 use loxlang::scanner;
 use wasm_bindgen::prelude::wasm_bindgen;

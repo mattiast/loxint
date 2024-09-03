@@ -1,10 +1,18 @@
-use crate::eval_expr::Value;
 use crate::syntax::VarName;
 use std::collections::HashMap;
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum Value {
+    Number(f64),
+    Boolean(bool),
+    String(String),
+    Nil,
+}
 
 pub struct EvalEnv<'a> {
     values: HashMap<VarName<'a>, Value>,
 }
+pub struct NotFound;
 
 impl<'a> EvalEnv<'a> {
     pub fn new() -> Self {
@@ -25,7 +33,7 @@ impl<'a> EvalEnv<'a> {
 
 pub enum Stack<'src, 'scope> {
     GlobalEnv(EvalEnv<'src>),
-    LocalEnv(EvalEnv<'src>, &'scope Stack<'src, 'scope>),
+    LocalEnv(EvalEnv<'src>, &'scope mut Stack<'src, 'scope>),
 }
 impl<'src, 'scope> Stack<'src, 'scope> {
     pub fn new() -> Self {
@@ -43,28 +51,46 @@ impl<'src, 'scope> Stack<'src, 'scope> {
             Self::LocalEnv(e, _) => e,
         }
     }
-    pub fn create_local_env(&'scope self) -> Self {
+    pub fn create_local_env<'a>(&'a mut self) -> Stack<'src, 'a>
+    where
+        'scope: 'a,
+    {
         Self::LocalEnv(EvalEnv::new(), self)
     }
-    // pub fn lookup(&self, name: &VarName<'src>) -> Option<Value> {
-    //     for env in self.stack.iter().rev() {
-    //         if let Some(x) = env.lookup(name) {
-    //             return Some(x);
-    //         }
-    //     }
-    //     None
+    pub fn increase_scope<'a>(&'a mut self) -> &'a mut Stack<'src, 'a>
+    where
+        //'scope: 'a,
+        'a: 'scope,
+    {
+        self
+    }
+    // pub fn reduce_scope<'a, 'b>(&'b mut self) -> &'b mut Stack<'src, 'a>
+    // where
+    //     'scope: 'a,
+    //     // 'a: 'scope,
+    // {
+    //     self
     // }
-    // pub fn assign(&mut self, name: VarName<'src>, value: Value) -> Result<(), ()> {
-    //     for env in self.stack.iter_mut().rev() {
-    //         if env.is_defined(&name) {
-    //             env.set(name, value);
-    //             return Ok(());
-    //         }
-    //     }
-    //     Err(())
-    // }
-    // pub fn declare(&mut self, name: VarName<'src>, value: Value) {
-    //     // TODO this unwrap could be avoided if Stack was guaranteed to have at least one environment
-    //     self.stack.last_mut().unwrap().set(name, value);
-    // }
+    pub fn lookup(&self, name: &VarName<'src>) -> Option<Value> {
+        if let Some(x) = self.get_env().lookup(name) {
+            Some(x)
+        } else if let Self::LocalEnv(_, parent) = self {
+            parent.lookup(name)
+        } else {
+            None
+        }
+    }
+    pub fn assign(&mut self, name: VarName<'src>, value: Value) -> Result<(), NotFound> {
+        if self.get_env().is_defined(&name) {
+            self.get_mut_env().set(name, value);
+            Ok(())
+        } else if let Self::LocalEnv(_, parent) = self {
+            parent.assign(name, value)
+        } else {
+            Err(NotFound)
+        }
+    }
+    pub fn declare(&mut self, name: VarName<'src>, value: Value) {
+        self.get_mut_env().set(name, value);
+    }
 }

@@ -1,76 +1,16 @@
-use std::collections::HashMap;
+use crate::execution_env::{NotFound, Stack, Value};
 
-use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator, VarName};
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum Value {
-    Number(f64),
-    Boolean(bool),
-    String(String),
-    Nil,
-}
+use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
 type EvalError = ();
 
-pub struct EvalEnv<'a> {
-    values: HashMap<VarName<'a>, Value>,
-}
-pub struct NotFound;
-
-impl<'a> EvalEnv<'a> {
-    pub fn new_global_env() -> Self {
-        Self {
-            values: HashMap::new(),
-        }
-    }
-    pub fn lookup(&self, name: &VarName) -> Option<Value> {
-        self.values.get(name).cloned()
-    }
-    pub fn is_defined(&self, name: &VarName<'a>) -> bool {
-        self.values.contains_key(name)
-    }
-    pub fn set(&mut self, name: VarName<'a>, value: Value) {
-        self.values.insert(name, value);
-    }
-}
-
-pub struct Stack<'a> {
-    // TODO ideally we don't want to allow expression evaluation to pop and push into the stack
-    // But only to modify the environments in the stack
-    stack: Vec<EvalEnv<'a>>,
-}
-impl<'a> Stack<'a> {
-    pub fn new() -> Self {
-        Self {
-            stack: vec![EvalEnv::new_global_env()],
-        }
-    }
-    pub fn lookup(&self, name: &VarName) -> Option<Value> {
-        for env in self.stack.iter().rev() {
-            if let Some(x) = env.lookup(name) {
-                return Some(x);
-            }
-        }
-        None
-    }
-    pub fn assign(&mut self, name: VarName<'a>, value: Value) -> Result<(), NotFound> {
-        for env in self.stack.iter_mut().rev() {
-            if env.is_defined(&name) {
-                env.set(name, value);
-                return Ok(());
-            }
-        }
-        Err(NotFound)
-    }
-    pub fn declare(&mut self, name: VarName<'a>, value: Value) {
-        // TODO this unwrap could be avoided if Stack was guaranteed to have at least one environment
-        self.stack.last_mut().unwrap().set(name, value);
-    }
-}
 // TODO add a type/trait for "execution environment", which has stack operations, and operations for print/clock
 // Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
-pub fn eval<'a>(e: &Expression<'a>, stack: &mut Stack<'a>) -> Result<Value, EvalError> {
+pub fn eval<'src, 'scope>(
+    e: &Expression<'src>,
+    stack: &mut Stack<'src, 'scope>,
+) -> Result<Value, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
@@ -128,7 +68,13 @@ pub fn eval<'a>(e: &Expression<'a>, stack: &mut Stack<'a>) -> Result<Value, Eval
     }
 }
 
-pub fn run_statement<'a>(s: &Declaration<'a>, stack: &mut Stack<'a>) -> Result<(), EvalError> {
+pub fn run_statement<'a, 'src, 'scope>(
+    s: &Declaration<'src>,
+    stack: &'a mut Stack<'src, 'scope>,
+) -> Result<(), EvalError>
+where
+    'scope: 'a,
+{
     match s {
         Declaration::Statement(Statement::Expression(e)) => {
             let _ = eval(e, stack)?;
@@ -146,11 +92,11 @@ pub fn run_statement<'a>(s: &Declaration<'a>, stack: &mut Stack<'a>) -> Result<(
             Ok(())
         }
         Declaration::Statement(Statement::Block(decls)) => {
-            stack.stack.push(EvalEnv::new_global_env()); // TODO lol rename
+            let mut new_stack: Stack<'src, '_> = stack.create_local_env();
             for d in decls {
-                run_statement(d, stack)?;
+                run_statement(d, &mut new_stack)?;
             }
-            stack.stack.pop();
+            drop(new_stack);
             Ok(())
         }
     }
