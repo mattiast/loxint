@@ -1,4 +1,4 @@
-use crate::execution_env::{NotFound, Stack, Value};
+use crate::execution_env::{ExecEnv, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
@@ -70,27 +70,27 @@ pub fn eval<'src, 'scope>(
 
 pub fn run_statement<'src>(
     s: &Declaration<'src>,
-    stack: &mut Stack<'src>,
+    env: &mut ExecEnv<'src>,
 ) -> Result<(), EvalError> {
     match s {
         Declaration::Statement(Statement::Expression(e)) => {
-            let _ = eval(e, stack)?;
+            let _ = eval(e, env.get_stack_mut())?;
             Ok(())
         }
         Declaration::Statement(Statement::Print(e)) => {
-            let v = eval(e, stack)?;
+            let v = eval(e, env.get_stack_mut())?;
             // TODO print should use dependency injection from "execution environment"
-            println!("{:?}", v);
+            env.print(v);
             Ok(())
         }
         Declaration::Var(s, e) => {
-            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), stack)?;
-            stack.declare(s.clone(), v);
+            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env.get_stack_mut())?;
+            env.get_stack_mut().declare(s.clone(), v);
             Ok(())
         }
-        Declaration::Statement(Statement::Block(decls)) => stack.run_in_local_env(|stack| {
+        Declaration::Statement(Statement::Block(decls)) => env.run_in_substack(|env| {
             for d in decls {
-                run_statement(d, stack)?;
+                run_statement(d, env)?;
             }
             Ok(())
         }),

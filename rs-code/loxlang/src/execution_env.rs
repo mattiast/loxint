@@ -48,16 +48,6 @@ impl<'src> Stack<'src> {
     pub fn get_mut_env<'a>(&'a mut self) -> &'a mut EvalEnv<'src> {
         &mut self.env
     }
-    pub fn run_in_local_env<F, U>(&mut self, f: F) -> U
-    where
-        F: FnOnce(&mut Stack<'src>) -> U,
-    {
-        // TODO this is screaming for RAII
-        self.go_to_local_env();
-        let v = f(self);
-        self.go_to_parent_env();
-        v
-    }
     fn go_to_local_env(&mut self) {
         // No huh huh
         // TODO make this less awful
@@ -93,5 +83,68 @@ impl<'src> Stack<'src> {
     }
     pub fn declare(&mut self, name: VarName<'src>, value: Value) {
         self.get_mut_env().set(name, value);
+    }
+}
+
+/// Runtime dependencies for lox programs
+pub trait Deps {
+    fn print(&mut self, value: Value);
+    fn clock(&mut self) -> f64;
+}
+
+struct DefaultDeps;
+impl Deps for DefaultDeps {
+    fn print(&mut self, value: Value) {
+        println!("{:?}", value);
+    }
+    fn clock(&mut self) -> f64 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs_f64()
+    }
+}
+
+pub struct ExecEnv<'src> {
+    stack: Stack<'src>,
+    deps: Box<dyn Deps>,
+}
+
+impl<'src> ExecEnv<'src> {
+    pub fn new(deps: Box<dyn Deps>) -> Self {
+        Self {
+            stack: Stack::new(),
+            deps,
+        }
+    }
+    pub fn new_default() -> Self {
+        Self {
+            stack: Stack::new(),
+            deps: Box::new(DefaultDeps),
+        }
+    }
+    pub fn get_stack(&self) -> &Stack<'src> {
+        &self.stack
+    }
+    pub fn get_stack_mut(&mut self) -> &mut Stack<'src> {
+        &mut self.stack
+    }
+    pub fn print(&mut self, value: Value) {
+        self.deps.print(value);
+    }
+    pub fn clock(&mut self) -> f64 {
+        self.deps.clock()
+    }
+    pub fn run_in_substack<F, U>(&mut self, f: F) -> U
+    where
+        F: FnOnce(&mut ExecEnv<'src>) -> U,
+    {
+        // TODO this is screaming for RAII
+        self.stack.go_to_local_env();
+        let v = f(self);
+        self.stack.go_to_parent_env();
+        v
     }
 }
