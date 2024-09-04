@@ -1,4 +1,4 @@
-use crate::execution_env::{NotFound, Stack, Value};
+use crate::execution_env::{ExecEnv, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
@@ -70,29 +70,83 @@ pub fn eval<'src, 'scope>(
 
 pub fn run_statement<'src>(
     s: &Declaration<'src>,
-    stack: &mut Stack<'src>,
+    env: &mut ExecEnv<'src>,
 ) -> Result<(), EvalError> {
     match s {
         Declaration::Statement(Statement::Expression(e)) => {
-            let _ = eval(e, stack)?;
+            let _ = eval(e, env.get_stack_mut())?;
             Ok(())
         }
         Declaration::Statement(Statement::Print(e)) => {
-            let v = eval(e, stack)?;
+            let v = eval(e, env.get_stack_mut())?;
             // TODO print should use dependency injection from "execution environment"
-            println!("{:?}", v);
+            env.print(v);
             Ok(())
         }
         Declaration::Var(s, e) => {
-            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), stack)?;
-            stack.declare(s.clone(), v);
+            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env.get_stack_mut())?;
+            env.get_stack_mut().declare(s.clone(), v);
             Ok(())
         }
-        Declaration::Statement(Statement::Block(decls)) => stack.run_in_local_env(|stack| {
+        Declaration::Statement(Statement::Block(decls)) => env.run_in_substack(|env| {
             for d in decls {
-                run_statement(d, stack)?;
+                run_statement(d, env)?;
             }
             Ok(())
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    use crate::execution_env::Deps;
+    use crate::execution_env::ExecEnv;
+    use crate::parser;
+    use crate::scanner::parse_tokens;
+
+    use super::*;
+    struct TestDeps {
+        printed: Arc<Mutex<Vec<Value>>>,
+    }
+    impl Deps for TestDeps {
+        fn print(&mut self, v: Value) {
+            self.printed.lock().unwrap().push(v);
+        }
+        fn clock(&mut self) -> f64 {
+            0.0
+        }
+    }
+
+    #[test]
+    fn run_program() {
+        let printed = Arc::new(Mutex::new(Vec::new()));
+        let deps = TestDeps {
+            printed: printed.clone(),
+        };
+        let mut env = ExecEnv::new(Box::new(deps));
+        // Define program as a multiline string, and parse it
+        let source = r#"
+            var a = "hi";
+            var b = 3;
+            7;
+            {
+            print a;
+            print b+1;
+            }
+        "#;
+        let (rest, tokens) = parse_tokens(source).unwrap();
+        assert_eq!(rest, "");
+        let mut parser = parser::Parser::new(&tokens);
+        let program = parser.parse_program().unwrap();
+        for stmt in program.decls {
+            run_statement(&stmt, &mut env).unwrap();
+        }
+        assert_eq!(
+            *printed.lock().unwrap(),
+            vec![Value::String("hi".to_string()), Value::Number(4.0)]
+        );
     }
 }

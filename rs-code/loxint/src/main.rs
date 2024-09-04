@@ -15,9 +15,9 @@ fn main() {
             assert_eq!(rest, "");
             let mut parser = parser::Parser::new(&tokens);
             let program = parser.parse_program().unwrap();
-            let mut stack = loxlang::execution_env::Stack::new();
+            let mut env = loxlang::execution_env::ExecEnv::new_default();
             for stmt in program.decls {
-                run_statement(&stmt, &mut stack).unwrap();
+                run_statement(&stmt, &mut env).unwrap();
             }
         }
         Commands::Repl => {
