@@ -2,6 +2,11 @@
 var a = "hi";
 var b = 3;
 7;
+if (b == 4) {
+    print "kolme";
+} else {
+    print "ei kolme";
+}
 {
 print a;
 print b+1;

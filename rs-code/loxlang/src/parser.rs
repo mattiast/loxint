@@ -42,6 +42,23 @@ where
                 }
                 Ok(Statement::Block(decls))
             }
+            Some(Token::Reserved(Reserved::IF)) => {
+                self.remaining = &self.remaining[1..];
+                self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+                let e = self.parse_expr()?;
+                self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+                let then_stmt = self.parse_statement()?;
+                if self.match_and_consume(Token::Reserved(Reserved::ELSE)) {
+                    let else_stmt = self.parse_statement()?;
+                    Ok(Statement::If(
+                        e,
+                        Box::new(then_stmt),
+                        Some(Box::new(else_stmt)),
+                    ))
+                } else {
+                    Ok(Statement::If(e, Box::new(then_stmt), None))
+                }
+            }
             _ => {
                 let e = self.parse_expr()?;
                 self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
@@ -304,6 +321,13 @@ where
             self.remaining = &self.remaining[string.len()..];
             Ok(())
         }
+    }
+    fn match_and_consume(&mut self, token: Token<'src>) -> bool {
+        let is_match = self.remaining.first() == Some(&token);
+        if is_match {
+            self.remaining = &self.remaining[1..];
+        }
+        is_match
     }
 }
 

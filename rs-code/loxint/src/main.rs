@@ -1,4 +1,4 @@
-use loxlang::eval_expr::run_statement;
+use loxlang::eval_expr::run_declaration;
 use loxlang::parser;
 use loxlang::scanner::parse_tokens;
 use std::io::Write;
@@ -17,7 +17,7 @@ fn main() {
             let program = parser.parse_program().unwrap();
             let mut env = loxlang::execution_env::ExecEnv::new_default();
             for stmt in program.decls {
-                run_statement(&stmt, &mut env).unwrap();
+                run_declaration(&stmt, &mut env).unwrap();
             }
         }
         Commands::Repl => {

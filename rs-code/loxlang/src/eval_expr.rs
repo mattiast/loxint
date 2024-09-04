@@ -4,8 +4,7 @@ use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
 type EvalError = ();
 
-// TODO add a type/trait for "execution environment", which has stack operations, and operations for print/clock
-// Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
+// TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
 pub fn eval<'src, 'scope>(
     e: &Expression<'src>,
@@ -68,32 +67,51 @@ pub fn eval<'src, 'scope>(
     }
 }
 
-pub fn run_statement<'src, Dep: Deps>(
+pub fn run_statement<'src, Dep: Deps>(s: &Statement<'src>, env: &mut ExecEnv<'src, Dep>) -> Result<(), EvalError> {
+    match s {
+        Statement::Expression(e) => {
+            let _ = eval(e, env.get_stack_mut())?;
+            Ok(())
+        }
+        Statement::Print(e) => {
+            let v = eval(e, env.get_stack_mut())?;
+            env.print(v);
+            Ok(())
+        }
+        Statement::Block(decls) => env.run_in_substack(|env| {
+            for d in decls {
+                run_declaration(d, env)?;
+            }
+            Ok(())
+        }),
+        Statement::If(cond, stmt_then, stmt_else) => {
+            let cond_val = eval(cond, env.get_stack_mut())?;
+            match cond_val {
+                Value::Boolean(true) => run_statement(stmt_then, env),
+                Value::Boolean(false) => {
+                    if let Some(stmt_else) = stmt_else {
+                        run_statement(stmt_else, env)
+                    } else {
+                        Ok(())
+                    }
+                }
+                _ => Err(()),
+            }
+        }
+    }
+}
+
+pub fn run_declaration<'src, Dep: Deps>(
     s: &Declaration<'src>,
     env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {
-        Declaration::Statement(Statement::Expression(e)) => {
-            let _ = eval(e, env.get_stack_mut())?;
-            Ok(())
-        }
-        Declaration::Statement(Statement::Print(e)) => {
-            let v = eval(e, env.get_stack_mut())?;
-            // TODO print should use dependency injection from "execution environment"
-            env.print(v);
-            Ok(())
-        }
         Declaration::Var(s, e) => {
             let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env.get_stack_mut())?;
             env.get_stack_mut().declare(s.clone(), v);
             Ok(())
         }
-        Declaration::Statement(Statement::Block(decls)) => env.run_in_substack(|env| {
-            for d in decls {
-                run_statement(d, env)?;
-            }
-            Ok(())
-        }),
+        Declaration::Statement(stmt) => run_statement(stmt, env),
     }
 }
 
@@ -138,7 +156,7 @@ mod tests {
         let mut parser = parser::Parser::new(&tokens);
         let program = parser.parse_program().unwrap();
         for stmt in program.decls {
-            run_statement(&stmt, &mut env).unwrap();
+            run_declaration(&stmt, &mut env).unwrap();
         }
         let deps = env.into_deps();
         assert_eq!(
