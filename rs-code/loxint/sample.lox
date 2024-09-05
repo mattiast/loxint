@@ -2,7 +2,20 @@
 var a = "hi";
 var b = 3;
 7;
+if (b == 4) {
+    print "kolme";
+} else {
+    print "ei kolme";
+}
 {
 print a;
 print b+1;
+}
+
+a = 1;
+b = 1;
+while (a < 1000) {
+    print a;
+    a = a + b;
+    b = a - b;
 }

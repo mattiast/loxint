@@ -3,6 +3,12 @@ pub enum Statement<'a> {
     Expression(Expression<'a>),
     Print(Expression<'a>),
     Block(Vec<Declaration<'a>>),
+    If(
+        Expression<'a>,
+        Box<Statement<'a>>,
+        Option<Box<Statement<'a>>>,
+    ),
+    While(Expression<'a>, Box<Statement<'a>>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -52,6 +58,9 @@ pub enum BOperator {
     MINUS,
     STAR,
     SLASH,
+
+    AND,
+    OR,
 
     BangEqual,
     EqualEqual,

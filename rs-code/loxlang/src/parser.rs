@@ -23,30 +23,44 @@ where
         self.remaining.is_empty()
     }
     pub fn parse_statement(&mut self) -> Result<Statement<'src>, ParseError> {
-        match self.remaining.first() {
-            Some(Token::Reserved(Reserved::PRINT)) => {
-                self.remaining = &self.remaining[1..];
-                let e = self.parse_expr()?;
-                self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-                Ok(Statement::Print(e))
-            }
-            Some(Token::Symbol(Symbol::LeftBrace)) => {
-                self.remaining = &self.remaining[1..];
-                let mut decls = Vec::new();
-                while !self.done() {
-                    if self.remaining.first() == Some(&Token::Symbol(Symbol::RightBrace)) {
-                        self.remaining = &self.remaining[1..];
-                        break;
-                    }
-                    decls.push(self.parse_declaration()?);
+        if self.match_and_consume(Token::Reserved(Reserved::PRINT)) {
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            Ok(Statement::Print(e))
+        } else if self.match_and_consume(Token::Symbol(Symbol::LeftBrace)) {
+            let mut decls = Vec::new();
+            while !self.done() {
+                if self.match_and_consume(Token::Symbol(Symbol::RightBrace)) {
+                    break;
                 }
-                Ok(Statement::Block(decls))
+                decls.push(self.parse_declaration()?);
             }
-            _ => {
-                let e = self.parse_expr()?;
-                self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-                Ok(Statement::Expression(e))
+            Ok(Statement::Block(decls))
+        } else if self.match_and_consume(Token::Reserved(Reserved::IF)) {
+            self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            let then_stmt = self.parse_statement()?;
+            if self.match_and_consume(Token::Reserved(Reserved::ELSE)) {
+                let else_stmt = self.parse_statement()?;
+                Ok(Statement::If(
+                    e,
+                    Box::new(then_stmt),
+                    Some(Box::new(else_stmt)),
+                ))
+            } else {
+                Ok(Statement::If(e, Box::new(then_stmt), None))
             }
+        } else if self.match_and_consume(Token::Reserved(Reserved::WHILE)) {
+            self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+            let cond = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            let body = self.parse_statement()?;
+            Ok(Statement::While(cond, Box::new(body)))
+        } else {
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            Ok(Statement::Expression(e))
         }
     }
     pub fn parse_program(&mut self) -> Result<Program<'src>, ParseError> {
@@ -57,31 +71,25 @@ where
         Ok(Program { decls })
     }
     fn parse_declaration(&mut self) -> Result<Declaration<'src>, ParseError> {
-        match self.remaining.first() {
-            Some(Token::Reserved(Reserved::VAR)) => {
-                self.remaining = &self.remaining[1..];
-                let name = self.parse_identifier()?;
-                match self.remaining.first() {
-                    Some(Token::Symbol(Symbol::EQUAL)) => {
-                        self.remaining = &self.remaining[1..];
-                        let e = self.parse_expr()?;
-                        self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-                        Ok(Declaration::Var(name, Some(e)))
-                    }
-                    _ => {
-                        self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-                        Ok(Declaration::Var(name, None))
-                    }
-                }
-            }
-            _ => self.parse_statement().map(Declaration::Statement),
+        if self.match_and_consume(Token::Reserved(Reserved::VAR)) {
+            let name = self.parse_identifier()?;
+            let value = if self.match_and_consume(Token::Symbol(Symbol::EQUAL)) {
+                let e = self.parse_expr()?;
+                Some(e)
+            } else {
+                None
+            };
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            Ok(Declaration::Var(name, value))
+        } else {
+            self.parse_statement().map(Declaration::Statement)
         }
     }
     pub fn parse_expr(&mut self) -> Result<Expression<'src>, ParseError> {
         self.parse_assignment()
     }
     fn parse_assignment(&mut self) -> Result<Expression<'src>, ParseError> {
-        let left = self.parse_equality()?;
+        let left = self.parse_logic_or()?;
 
         if self.remaining.first() == Some(&Token::Symbol(Symbol::EQUAL)) {
             self.consume(&[Token::Symbol(Symbol::EQUAL)])?;
@@ -96,6 +104,38 @@ where
         } else {
             Ok(left)
         }
+    }
+    fn parse_logic_or(&mut self) -> Result<Expression<'src>, ParseError> {
+        let mut left = self.parse_logic_and()?;
+        loop {
+            if self.match_and_consume(Token::Reserved(Reserved::OR)) {
+                let right = self.parse_logic_and()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::OR,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+    fn parse_logic_and(&mut self) -> Result<Expression<'src>, ParseError> {
+        let mut left = self.parse_equality()?;
+        loop {
+            if self.match_and_consume(Token::Reserved(Reserved::AND)) {
+                let right = self.parse_equality()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::AND,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(left)
     }
 
     fn parse_grouping(&mut self) -> Result<Expression<'src>, ParseError> {
@@ -137,16 +177,12 @@ where
     }
 
     fn parse_unary(&mut self) -> Result<Expression<'src>, ParseError> {
-        let operator = match self.remaining.first() {
-            Some(Token::Symbol(Symbol::MINUS)) => {
-                self.remaining = &self.remaining[1..];
-                Some(UOperator::MINUS)
-            }
-            Some(Token::Symbol(Symbol::BANG)) => {
-                self.remaining = &self.remaining[1..];
-                Some(UOperator::BANG)
-            }
-            _ => None,
+        let operator = if self.match_and_consume(Token::Symbol(Symbol::MINUS)) {
+            Some(UOperator::MINUS)
+        } else if self.match_and_consume(Token::Symbol(Symbol::BANG)) {
+            Some(UOperator::BANG)
+        } else {
+            None
         };
         match operator {
             None => self.parse_primary(),
@@ -163,26 +199,22 @@ where
     fn parse_factor(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_unary()?;
         loop {
-            match self.remaining.first() {
-                Some(Token::Symbol(Symbol::STAR)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_unary()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::STAR,
-                        right: Box::new(right),
-                    };
-                }
-                Some(Token::Symbol(Symbol::SLASH)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_unary()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::SLASH,
-                        right: Box::new(right),
-                    };
-                }
-                _ => break,
+            if self.match_and_consume(Token::Symbol(Symbol::STAR)) {
+                let right = self.parse_unary()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::STAR,
+                    right: Box::new(right),
+                };
+            } else if self.match_and_consume(Token::Symbol(Symbol::SLASH)) {
+                let right = self.parse_unary()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::SLASH,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
             }
         }
         Ok(left)
@@ -190,26 +222,22 @@ where
     fn parse_term(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_factor()?;
         loop {
-            match self.remaining.first() {
-                Some(Token::Symbol(Symbol::PLUS)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_factor()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::PLUS,
-                        right: Box::new(right),
-                    };
-                }
-                Some(Token::Symbol(Symbol::MINUS)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_factor()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::MINUS,
-                        right: Box::new(right),
-                    };
-                }
-                _ => break,
+            if self.match_and_consume(Token::Symbol(Symbol::PLUS)) {
+                let right = self.parse_factor()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::PLUS,
+                    right: Box::new(right),
+                };
+            } else if self.match_and_consume(Token::Symbol(Symbol::MINUS)) {
+                let right = self.parse_factor()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::MINUS,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
             }
         }
         Ok(left)
@@ -217,44 +245,36 @@ where
     fn parse_comparison(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_term()?;
         loop {
-            match self.remaining.first() {
-                Some(Token::Symbol(Symbol::GREATER)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_term()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::GREATER,
-                        right: Box::new(right),
-                    };
-                }
-                Some(Token::Symbol(Symbol::GreaterEqual)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_term()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::GreaterEqual,
-                        right: Box::new(right),
-                    };
-                }
-                Some(Token::Symbol(Symbol::LESS)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_term()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::LESS,
-                        right: Box::new(right),
-                    };
-                }
-                Some(Token::Symbol(Symbol::LessEqual)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_term()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::LessEqual,
-                        right: Box::new(right),
-                    };
-                }
-                _ => break,
+            if self.match_and_consume(Token::Symbol(Symbol::GREATER)) {
+                let right = self.parse_term()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::GREATER,
+                    right: Box::new(right),
+                };
+            } else if self.match_and_consume(Token::Symbol(Symbol::GreaterEqual)) {
+                let right = self.parse_term()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::GreaterEqual,
+                    right: Box::new(right),
+                };
+            } else if self.match_and_consume(Token::Symbol(Symbol::LESS)) {
+                let right = self.parse_term()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::LESS,
+                    right: Box::new(right),
+                };
+            } else if self.match_and_consume(Token::Symbol(Symbol::LessEqual)) {
+                let right = self.parse_term()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::LessEqual,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
             }
         }
         Ok(left)
@@ -262,26 +282,22 @@ where
     fn parse_equality(&mut self) -> Result<Expression<'src>, ParseError> {
         let mut left = self.parse_comparison()?;
         loop {
-            match self.remaining.first() {
-                Some(Token::Symbol(Symbol::BangEqual)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_comparison()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::BangEqual,
-                        right: Box::new(right),
-                    };
-                }
-                Some(Token::Symbol(Symbol::EqualEqual)) => {
-                    self.remaining = &self.remaining[1..];
-                    let right = self.parse_comparison()?;
-                    left = Expression::Binary {
-                        left: Box::new(left),
-                        operator: BOperator::EqualEqual,
-                        right: Box::new(right),
-                    };
-                }
-                _ => break,
+            if self.match_and_consume(Token::Symbol(Symbol::BangEqual)) {
+                let right = self.parse_comparison()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::BangEqual,
+                    right: Box::new(right),
+                };
+            } else if self.match_and_consume(Token::Symbol(Symbol::EqualEqual)) {
+                let right = self.parse_comparison()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::EqualEqual,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
             }
         }
         Ok(left)
@@ -304,6 +320,13 @@ where
             self.remaining = &self.remaining[string.len()..];
             Ok(())
         }
+    }
+    fn match_and_consume(&mut self, token: Token<'src>) -> bool {
+        let is_match = self.remaining.first() == Some(&token);
+        if is_match {
+            self.remaining = &self.remaining[1..];
+        }
+        is_match
     }
 }
 
