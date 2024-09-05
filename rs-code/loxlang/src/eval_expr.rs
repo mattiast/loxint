@@ -35,26 +35,58 @@ pub fn eval<'src, 'scope>(
             right,
         } => {
             let left = eval(left, stack)?;
-            let right = eval(right, stack)?;
-            match (left, operator, right) {
-                (Value::Number(l), BOperator::PLUS, Value::Number(r)) => Ok(Value::Number(l + r)),
-                (Value::String(l), BOperator::PLUS, Value::String(r)) => Ok(Value::String(l + &r)),
-                (Value::Number(l), BOperator::MINUS, Value::Number(r)) => Ok(Value::Number(l - r)),
-                (Value::Number(l), BOperator::STAR, Value::Number(r)) => Ok(Value::Number(l * r)),
-                (Value::Number(l), BOperator::SLASH, Value::Number(r)) => Ok(Value::Number(l / r)), // div by zero?
-                (Value::Number(l), BOperator::LESS, Value::Number(r)) => Ok(Value::Boolean(l < r)),
-                (Value::Number(l), BOperator::LessEqual, Value::Number(r)) => {
-                    Ok(Value::Boolean(l <= r))
+            match (left, operator) {
+                // First check some cases where we may shor-circuit and not evaluate the right side
+                (Value::Boolean(l), BOperator::AND) => {
+                    if !l {
+                        Ok(Value::Boolean(false))
+                    } else {
+                        eval(right, stack)
+                    }
                 }
-                (Value::Number(l), BOperator::GREATER, Value::Number(r)) => {
-                    Ok(Value::Boolean(l > r))
+                (Value::Boolean(l), BOperator::OR) => {
+                    if l {
+                        Ok(Value::Boolean(true))
+                    } else {
+                        eval(right, stack)
+                    }
                 }
-                (Value::Number(l), BOperator::GreaterEqual, Value::Number(r)) => {
-                    Ok(Value::Boolean(l >= r))
+                (left, _) => {
+                    // In rest of the cases we always need to evaluate both operands
+                    let right = eval(right, stack)?;
+                    match (left, operator, right) {
+                        (Value::Number(l), BOperator::PLUS, Value::Number(r)) => {
+                            Ok(Value::Number(l + r))
+                        }
+                        (Value::String(l), BOperator::PLUS, Value::String(r)) => {
+                            Ok(Value::String(l + &r))
+                        }
+                        (Value::Number(l), BOperator::MINUS, Value::Number(r)) => {
+                            Ok(Value::Number(l - r))
+                        }
+                        (Value::Number(l), BOperator::STAR, Value::Number(r)) => {
+                            Ok(Value::Number(l * r))
+                        }
+                        (Value::Number(l), BOperator::SLASH, Value::Number(r)) => {
+                            Ok(Value::Number(l / r))
+                        } // div by zero?
+                        (Value::Number(l), BOperator::LESS, Value::Number(r)) => {
+                            Ok(Value::Boolean(l < r))
+                        }
+                        (Value::Number(l), BOperator::LessEqual, Value::Number(r)) => {
+                            Ok(Value::Boolean(l <= r))
+                        }
+                        (Value::Number(l), BOperator::GREATER, Value::Number(r)) => {
+                            Ok(Value::Boolean(l > r))
+                        }
+                        (Value::Number(l), BOperator::GreaterEqual, Value::Number(r)) => {
+                            Ok(Value::Boolean(l >= r))
+                        }
+                        (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
+                        (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
+                        _ => Err(()),
+                    }
                 }
-                (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
-                (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
-                _ => Err(()),
             }
         }
         Expression::Assignment(name, value) => {
@@ -67,7 +99,10 @@ pub fn eval<'src, 'scope>(
     }
 }
 
-pub fn run_statement<'src, Dep: Deps>(s: &Statement<'src>, env: &mut ExecEnv<'src, Dep>) -> Result<(), EvalError> {
+pub fn run_statement<'src, Dep: Deps>(
+    s: &Statement<'src>,
+    env: &mut ExecEnv<'src, Dep>,
+) -> Result<(), EvalError> {
     match s {
         Statement::Expression(e) => {
             let _ = eval(e, env.get_stack_mut())?;
