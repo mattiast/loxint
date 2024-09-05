@@ -8,6 +8,7 @@ pub enum Statement<'a> {
         Box<Statement<'a>>,
         Option<Box<Statement<'a>>>,
     ),
+    While(Expression<'a>, Box<Statement<'a>>),
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

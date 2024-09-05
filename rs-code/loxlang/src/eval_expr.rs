@@ -133,6 +133,18 @@ pub fn run_statement<'src, Dep: Deps>(
                 _ => Err(()),
             }
         }
+        Statement::While(cond, body) => loop {
+            let cond_val = eval(cond, env.get_stack_mut())?;
+            match cond_val {
+                Value::Boolean(true) => run_statement(body, env)?,
+                Value::Boolean(false) => {
+                    return Ok(());
+                }
+                _ => {
+                    return Err(());
+                }
+            }
+        },
     }
 }
 

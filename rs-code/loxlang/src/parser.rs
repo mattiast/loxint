@@ -23,47 +23,45 @@ where
         self.remaining.is_empty()
     }
     pub fn parse_statement(&mut self) -> Result<Statement<'src>, ParseError> {
-        match self.remaining.first() {
-            Some(Token::Reserved(Reserved::PRINT)) => {
-                self.remaining = &self.remaining[1..];
-                let e = self.parse_expr()?;
-                self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-                Ok(Statement::Print(e))
-            }
-            Some(Token::Symbol(Symbol::LeftBrace)) => {
-                self.remaining = &self.remaining[1..];
-                let mut decls = Vec::new();
-                while !self.done() {
-                    if self.remaining.first() == Some(&Token::Symbol(Symbol::RightBrace)) {
-                        self.remaining = &self.remaining[1..];
-                        break;
-                    }
-                    decls.push(self.parse_declaration()?);
+        if self.match_and_consume(Token::Reserved(Reserved::PRINT)) {
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            Ok(Statement::Print(e))
+        } else if self.match_and_consume(Token::Symbol(Symbol::LeftBrace)) {
+            let mut decls = Vec::new();
+            while !self.done() {
+                if self.remaining.first() == Some(&Token::Symbol(Symbol::RightBrace)) {
+                    self.remaining = &self.remaining[1..];
+                    break;
                 }
-                Ok(Statement::Block(decls))
+                decls.push(self.parse_declaration()?);
             }
-            Some(Token::Reserved(Reserved::IF)) => {
-                self.remaining = &self.remaining[1..];
-                self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
-                let e = self.parse_expr()?;
-                self.consume(&[Token::Symbol(Symbol::RightParen)])?;
-                let then_stmt = self.parse_statement()?;
-                if self.match_and_consume(Token::Reserved(Reserved::ELSE)) {
-                    let else_stmt = self.parse_statement()?;
-                    Ok(Statement::If(
-                        e,
-                        Box::new(then_stmt),
-                        Some(Box::new(else_stmt)),
-                    ))
-                } else {
-                    Ok(Statement::If(e, Box::new(then_stmt), None))
-                }
+            Ok(Statement::Block(decls))
+        } else if self.match_and_consume(Token::Reserved(Reserved::IF)) {
+            self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            let then_stmt = self.parse_statement()?;
+            if self.match_and_consume(Token::Reserved(Reserved::ELSE)) {
+                let else_stmt = self.parse_statement()?;
+                Ok(Statement::If(
+                    e,
+                    Box::new(then_stmt),
+                    Some(Box::new(else_stmt)),
+                ))
+            } else {
+                Ok(Statement::If(e, Box::new(then_stmt), None))
             }
-            _ => {
-                let e = self.parse_expr()?;
-                self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-                Ok(Statement::Expression(e))
-            }
+        } else if self.match_and_consume(Token::Reserved(Reserved::WHILE)) {
+            self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+            let cond = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            let body = self.parse_statement()?;
+            Ok(Statement::While(cond, Box::new(body)))
+        } else {
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            Ok(Statement::Expression(e))
         }
     }
     pub fn parse_program(&mut self) -> Result<Program<'src>, ParseError> {
