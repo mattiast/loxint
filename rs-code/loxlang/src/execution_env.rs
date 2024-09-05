@@ -92,7 +92,7 @@ pub trait Deps {
     fn clock(&mut self) -> f64;
 }
 
-struct DefaultDeps;
+pub struct DefaultDeps;
 impl Deps for DefaultDeps {
     fn print(&mut self, value: Value) {
         println!("{:?}", value);
@@ -107,23 +107,28 @@ impl Deps for DefaultDeps {
     }
 }
 
-pub struct ExecEnv<'src> {
+pub struct ExecEnv<'src, Dep: Deps> {
     stack: Stack<'src>,
-    deps: Box<dyn Deps>,
+    deps: Dep,
 }
 
-impl<'src> ExecEnv<'src> {
-    pub fn new(deps: Box<dyn Deps>) -> Self {
+impl<'src> ExecEnv<'src, DefaultDeps> {
+    pub fn new_default() -> Self {
+        Self {
+            stack: Stack::new(),
+            deps: DefaultDeps,
+        }
+    }
+}
+impl<'src, Dep: Deps> ExecEnv<'src, Dep> {
+    pub fn new(deps: Dep) -> Self {
         Self {
             stack: Stack::new(),
             deps,
         }
     }
-    pub fn new_default() -> Self {
-        Self {
-            stack: Stack::new(),
-            deps: Box::new(DefaultDeps),
-        }
+    pub fn into_deps(self) -> Dep {
+        self.deps
     }
     pub fn get_stack(&self) -> &Stack<'src> {
         &self.stack
@@ -139,7 +144,7 @@ impl<'src> ExecEnv<'src> {
     }
     pub fn run_in_substack<F, U>(&mut self, f: F) -> U
     where
-        F: FnOnce(&mut ExecEnv<'src>) -> U,
+        F: FnOnce(&mut ExecEnv<'src, Dep>) -> U,
     {
         // TODO this is screaming for RAII
         self.stack.go_to_local_env();
