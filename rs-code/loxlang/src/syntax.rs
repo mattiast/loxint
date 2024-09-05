@@ -58,6 +58,9 @@ pub enum BOperator {
     STAR,
     SLASH,
 
+    AND,
+    OR,
+
     BangEqual,
     EqualEqual,
     LESS,

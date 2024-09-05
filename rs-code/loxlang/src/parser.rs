@@ -98,7 +98,7 @@ where
         self.parse_assignment()
     }
     fn parse_assignment(&mut self) -> Result<Expression<'src>, ParseError> {
-        let left = self.parse_equality()?;
+        let left = self.parse_logic_or()?;
 
         if self.remaining.first() == Some(&Token::Symbol(Symbol::EQUAL)) {
             self.consume(&[Token::Symbol(Symbol::EQUAL)])?;
@@ -113,6 +113,38 @@ where
         } else {
             Ok(left)
         }
+    }
+    fn parse_logic_or(&mut self) -> Result<Expression<'src>, ParseError> {
+        let mut left = self.parse_logic_and()?;
+        loop {
+            if self.match_and_consume(Token::Reserved(Reserved::OR)) {
+                let right = self.parse_logic_and()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::OR,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(left)
+    }
+    fn parse_logic_and(&mut self) -> Result<Expression<'src>, ParseError> {
+        let mut left = self.parse_equality()?;
+        loop {
+            if self.match_and_consume(Token::Reserved(Reserved::AND)) {
+                let right = self.parse_equality()?;
+                left = Expression::Binary {
+                    left: Box::new(left),
+                    operator: BOperator::AND,
+                    right: Box::new(right),
+                };
+            } else {
+                break;
+            }
+        }
+        Ok(left)
     }
 
     fn parse_grouping(&mut self) -> Result<Expression<'src>, ParseError> {
