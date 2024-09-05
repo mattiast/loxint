@@ -1,4 +1,4 @@
-use crate::execution_env::{ExecEnv, NotFound, Stack, Value};
+use crate::execution_env::{Deps, ExecEnv, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
@@ -68,9 +68,9 @@ pub fn eval<'src, 'scope>(
     }
 }
 
-pub fn run_statement<'src>(
+pub fn run_statement<'src, Dep: Deps>(
     s: &Declaration<'src>,
-    env: &mut ExecEnv<'src>,
+    env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {
         Declaration::Statement(Statement::Expression(e)) => {
@@ -99,9 +99,6 @@ pub fn run_statement<'src>(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-    use std::sync::Mutex;
-
     use crate::execution_env::Deps;
     use crate::execution_env::ExecEnv;
     use crate::parser;
@@ -109,11 +106,11 @@ mod tests {
 
     use super::*;
     struct TestDeps {
-        printed: Arc<Mutex<Vec<Value>>>,
+        printed: Vec<Value>,
     }
     impl Deps for TestDeps {
         fn print(&mut self, v: Value) {
-            self.printed.lock().unwrap().push(v);
+            self.printed.push(v);
         }
         fn clock(&mut self) -> f64 {
             0.0
@@ -122,11 +119,10 @@ mod tests {
 
     #[test]
     fn run_program() {
-        let printed = Arc::new(Mutex::new(Vec::new()));
         let deps = TestDeps {
-            printed: printed.clone(),
+            printed: Vec::new(),
         };
-        let mut env = ExecEnv::new(Box::new(deps));
+        let mut env = ExecEnv::new(deps);
         // Define program as a multiline string, and parse it
         let source = r#"
             var a = "hi";
@@ -144,8 +140,9 @@ mod tests {
         for stmt in program.decls {
             run_statement(&stmt, &mut env).unwrap();
         }
+        let deps = env.into_deps();
         assert_eq!(
-            *printed.lock().unwrap(),
+            deps.printed,
             vec![Value::String("hi".to_string()), Value::Number(4.0)]
         );
     }
