@@ -252,4 +252,34 @@ mod tests {
             vec![Value::String("hi".to_string()), Value::Number(4.0)]
         );
     }
+    #[test]
+    fn for_loop() {
+        let deps = TestDeps {
+            printed: Vec::new(),
+        };
+        let mut env = ExecEnv::new(deps);
+        // Define program as a multiline string, and parse it
+        let source = r#"
+            for(var a = 1; a <= 4; a = a+1) {
+                print a;
+            }
+        "#;
+        let (rest, tokens) = parse_tokens(source).unwrap();
+        assert_eq!(rest, "");
+        let mut parser = parser::Parser::new(&tokens);
+        let program = parser.parse_program().unwrap();
+        for stmt in program.decls {
+            run_declaration(&stmt, &mut env).unwrap();
+        }
+        let deps = env.into_deps();
+        assert_eq!(
+            deps.printed,
+            vec![
+                Value::Number(1.0),
+                Value::Number(2.0),
+                Value::Number(3.0),
+                Value::Number(4.0)
+            ]
+        );
+    }
 }
