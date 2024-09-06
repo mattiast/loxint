@@ -37,7 +37,7 @@ pub struct Program<'a> {
     pub decls: Vec<Declaration<'a>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expression<'a> {
     Nil,
     StringLiteral(String),
@@ -59,13 +59,13 @@ pub enum Expression<'a> {
     // Generic annotation for each node?
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UOperator {
     MINUS,
     BANG,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BOperator {
     PLUS,
     MINUS,

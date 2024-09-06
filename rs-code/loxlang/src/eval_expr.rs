@@ -145,6 +145,47 @@ pub fn run_statement<'src, Dep: Deps>(
                 }
             }
         },
+        Statement::For(loopdef, body) => {
+            // We need to create a new stack frame for the loop, where the declaration is executed
+            env.run_in_substack(|env| {
+                match loopdef.var_name {
+                    Some(ref var_name) => {
+                        let decl = Declaration::Var(var_name.clone(), loopdef.start.clone());
+                        run_declaration(&decl, env)
+                    }
+                    None => {
+                        if let Some(ref start) = loopdef.start {
+                            eval(start, env.get_stack_mut())?;
+                        }
+                        Ok(())
+                    }
+                }?;
+                loop {
+                    // Evaluate the condition
+                    let cond_val = if let Some(ref cond) = loopdef.cond {
+                        let cond_val = eval(cond, env.get_stack_mut())?;
+                        match cond_val {
+                            Value::Boolean(x) => x,
+                            _ => {
+                                return Err(());
+                            }
+                        }
+                    } else {
+                        true
+                    };
+                    // If the condition is false, end the loop
+                    if !cond_val {
+                        return Ok(());
+                    }
+                    // Evaluate the body
+                    run_statement(body, env)?;
+                    // Evaluate the increment
+                    if let Some(ref inc) = loopdef.increment {
+                        eval(inc, env.get_stack_mut())?;
+                    }
+                }
+            })
+        }
     }
 }
 
