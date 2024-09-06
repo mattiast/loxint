@@ -1,6 +1,8 @@
 use crate::{
     scanner::{Reserved, Symbol, Token},
-    syntax::{BOperator, Declaration, Expression, Program, Statement, UOperator, VarName},
+    syntax::{
+        BOperator, Declaration, Expression, ForLoopDef, Program, Statement, UOperator, VarName,
+    },
 };
 
 pub struct Parser<'a, 'b> {
@@ -57,11 +59,56 @@ where
             self.consume(&[Token::Symbol(Symbol::RightParen)])?;
             let body = self.parse_statement()?;
             Ok(Statement::While(cond, Box::new(body)))
+        } else if self.match_and_consume(Token::Reserved(Reserved::FOR)) {
+            let loopdef = self.parse_for_loop_line()?;
+            let body = self.parse_statement()?;
+            Ok(Statement::For(loopdef, Box::new(body)))
         } else {
             let e = self.parse_expr()?;
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
             Ok(Statement::Expression(e))
         }
+    }
+    /// This will match the `(var a = 1; a < 10; a = a + 1)` part of a for loop
+    fn parse_for_loop_line(&mut self) -> Result<ForLoopDef<'src>, ParseError> {
+        self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+        let (var_name, start) = if self.match_and_consume(Token::Symbol(Symbol::SEMICOLON)) {
+            (None, None)
+        } else if self.match_and_consume(Token::Reserved(Reserved::VAR)) {
+            let var_name = Some(self.parse_identifier()?);
+            let start = if self.match_and_consume(Token::Symbol(Symbol::EQUAL)) {
+                let e = self.parse_expr()?;
+                Some(e)
+            } else {
+                None
+            };
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            (var_name, start)
+        } else {
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            (None, Some(e))
+        };
+        let cond = if self.match_and_consume(Token::Symbol(Symbol::SEMICOLON)) {
+            None
+        } else {
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
+            Some(e)
+        };
+        let increment = if self.match_and_consume(Token::Symbol(Symbol::RightParen)) {
+            None
+        } else {
+            let e = self.parse_expr()?;
+            self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            Some(e)
+        };
+        Ok(ForLoopDef {
+            var_name,
+            start,
+            cond,
+            increment,
+        })
     }
     pub fn parse_program(&mut self) -> Result<Program<'src>, ParseError> {
         let mut decls = Vec::new();

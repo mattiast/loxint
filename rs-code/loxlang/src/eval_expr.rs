@@ -145,6 +145,47 @@ pub fn run_statement<'src, Dep: Deps>(
                 }
             }
         },
+        Statement::For(loopdef, body) => {
+            // We need to create a new stack frame for the loop, where the declaration is executed
+            env.run_in_substack(|env| {
+                match loopdef.var_name {
+                    Some(ref var_name) => {
+                        let decl = Declaration::Var(var_name.clone(), loopdef.start.clone());
+                        run_declaration(&decl, env)
+                    }
+                    None => {
+                        if let Some(ref start) = loopdef.start {
+                            eval(start, env.get_stack_mut())?;
+                        }
+                        Ok(())
+                    }
+                }?;
+                loop {
+                    // Evaluate the condition
+                    let cond_val = if let Some(ref cond) = loopdef.cond {
+                        let cond_val = eval(cond, env.get_stack_mut())?;
+                        match cond_val {
+                            Value::Boolean(x) => x,
+                            _ => {
+                                return Err(());
+                            }
+                        }
+                    } else {
+                        true
+                    };
+                    // If the condition is false, end the loop
+                    if !cond_val {
+                        return Ok(());
+                    }
+                    // Evaluate the body
+                    run_statement(body, env)?;
+                    // Evaluate the increment
+                    if let Some(ref inc) = loopdef.increment {
+                        eval(inc, env.get_stack_mut())?;
+                    }
+                }
+            })
+        }
     }
 }
 
@@ -209,6 +250,36 @@ mod tests {
         assert_eq!(
             deps.printed,
             vec![Value::String("hi".to_string()), Value::Number(4.0)]
+        );
+    }
+    #[test]
+    fn for_loop() {
+        let deps = TestDeps {
+            printed: Vec::new(),
+        };
+        let mut env = ExecEnv::new(deps);
+        // Define program as a multiline string, and parse it
+        let source = r#"
+            for(var a = 1; a <= 4; a = a+1) {
+                print a;
+            }
+        "#;
+        let (rest, tokens) = parse_tokens(source).unwrap();
+        assert_eq!(rest, "");
+        let mut parser = parser::Parser::new(&tokens);
+        let program = parser.parse_program().unwrap();
+        for stmt in program.decls {
+            run_declaration(&stmt, &mut env).unwrap();
+        }
+        let deps = env.into_deps();
+        assert_eq!(
+            deps.printed,
+            vec![
+                Value::Number(1.0),
+                Value::Number(2.0),
+                Value::Number(3.0),
+                Value::Number(4.0)
+            ]
         );
     }
 }
