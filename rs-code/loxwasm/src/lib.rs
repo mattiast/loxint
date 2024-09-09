@@ -32,7 +32,10 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
     match loxlang::eval_expr::eval(&e, &mut stack) {
         Ok(Value::Number(x)) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),
-        Ok(Value::Boolean(_)) | Ok(Value::String(_)) | Ok(Value::Nil) => Err(LoxError(
+        Ok(Value::Boolean(_))
+        | Ok(Value::String(_))
+        | Ok(Value::Nil)
+        | Ok(Value::NativeFunction(_)) => Err(LoxError(
             "Expected number, got non-number value".to_string(),
         )),
     }

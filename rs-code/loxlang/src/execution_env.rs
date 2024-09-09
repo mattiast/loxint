@@ -7,6 +7,15 @@ pub enum Value {
     Boolean(bool),
     String(String),
     Nil,
+    // Callable(Box<dyn Fn(&mut EvalEnv) -> Result<Value, Error>>),
+    // Must also take a list of arguments
+    // And have an "arity" u8
+    // Native functions are a separate type, they are a function item
+    NativeFunction(NativeFunc),
+}
+#[derive(PartialEq, Debug, Clone)]
+pub enum NativeFunc {
+    Clock,
 }
 
 pub struct EvalEnv<'a> {
@@ -37,8 +46,11 @@ pub struct Stack<'src> {
 }
 impl<'src> Stack<'src> {
     pub fn new() -> Self {
+        let mut global_env = EvalEnv::new();
+        global_env.set(VarName("clock"), Value::NativeFunction(NativeFunc::Clock));
+
         Self {
-            env: EvalEnv::new(),
+            env: global_env,
             parent: None,
         }
     }
