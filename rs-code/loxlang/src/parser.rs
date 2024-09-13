@@ -232,7 +232,7 @@ where
             None
         };
         match operator {
-            None => self.parse_primary(),
+            None => self.parse_call(),
             Some(operator) => {
                 let right = self.parse_unary()?;
                 Ok(Expression::Unary {
@@ -241,6 +241,27 @@ where
                 })
             }
         }
+    }
+    fn parse_call(&mut self) -> Result<Expression<'src>, ParseError> {
+        let mut expr = self.parse_primary()?;
+        // Parse any number of calls
+        while self.match_and_consume(Token::Symbol(Symbol::LeftParen)) {
+            let mut args = vec![];
+            if !self.match_and_consume(Token::Symbol(Symbol::RightParen)) {
+                loop {
+                    args.push(self.parse_expr()?);
+                    if !self.match_and_consume(Token::Symbol(Symbol::COMMA)) {
+                        break;
+                    }
+                }
+                self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            }
+            if args.len() > 254 {
+                return Err(ParseError::Bad);
+            }
+            expr = Expression::FunctionCall(Box::new(expr), args);
+        }
+        Ok(expr)
     }
 
     fn parse_factor(&mut self) -> Result<Expression<'src>, ParseError> {

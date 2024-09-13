@@ -54,6 +54,7 @@ pub enum Expression<'a> {
         right: Box<Expression<'a>>,
     },
     Assignment(VarName<'a>, Box<Expression<'a>>),
+    FunctionCall(Box<Expression<'a>>, Vec<Expression<'a>>),
     // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
     // TODO Should there be some link to where this was defined in the source?
     // Generic annotation for each node?
@@ -107,6 +108,16 @@ impl<'a> Expression<'a> {
                 )
             }
             Expression::Assignment(VarName(s), e) => format!("(SET {} {})", s, e.pretty_print()),
+            Expression::FunctionCall(e, args) => {
+                format!(
+                    "(CALL {} {})",
+                    e.pretty_print(),
+                    args.iter()
+                        .map(|arg| arg.pretty_print())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            }
         }
     }
 }
