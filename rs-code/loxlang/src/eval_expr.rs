@@ -1,4 +1,4 @@
-use crate::execution_env::{Deps, ExecEnv, NotFound, Stack, Value};
+use crate::execution_env::{Deps, ExecEnv, LoxFunction, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
@@ -6,7 +6,7 @@ type EvalError = ();
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
-pub fn eval<'src>(e: &Expression<'src>, stack: &mut Stack<'src>) -> Result<Value, EvalError> {
+pub fn eval<'src>(e: &Expression<'src>, stack: &mut Stack<'src>) -> Result<Value<'src>, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
@@ -93,6 +93,7 @@ pub fn eval<'src>(e: &Expression<'src>, stack: &mut Stack<'src>) -> Result<Value
                 Err(NotFound) => Err(()),
             }
         }
+        Expression::FunctionCall(_, _) => todo!(),
     }
 }
 
@@ -197,6 +198,15 @@ pub fn run_declaration<'src, Dep: Deps>(
             Ok(())
         }
         Declaration::Statement(stmt) => run_statement(stmt, env),
+        Declaration::Function { name, args, body } => {
+            let func = LoxFunction {
+                arguments: args.clone(),
+                body: body.clone(),
+                env: todo!(),
+            };
+            env.get_stack_mut()
+                .declare(name.clone(), Value::Function(func));
+        }
     }
 }
 
@@ -209,11 +219,11 @@ mod tests {
 
     use super::*;
     struct TestDeps {
-        printed: Vec<Value>,
+        printed: Vec<String>,
     }
     impl Deps for TestDeps {
-        fn print(&mut self, v: Value) {
-            self.printed.push(v);
+        fn print<'src>(&mut self, v: Value<'src>) {
+            self.printed.push(format!("{v:?}"));
         }
         fn clock(&mut self) -> f64 {
             0.0
@@ -244,10 +254,7 @@ mod tests {
             run_declaration(&stmt, &mut env).unwrap();
         }
         let deps = env.into_deps();
-        assert_eq!(
-            deps.printed,
-            vec![Value::String("hi".to_string()), Value::Number(4.0)]
-        );
+        assert_eq!(deps.printed, vec!["String(\"hi\")", "Number(4.0)"]);
     }
     #[test]
     fn for_loop() {
@@ -271,12 +278,7 @@ mod tests {
         let deps = env.into_deps();
         assert_eq!(
             deps.printed,
-            vec![
-                Value::Number(1.0),
-                Value::Number(2.0),
-                Value::Number(3.0),
-                Value::Number(4.0)
-            ]
+            vec!["Number(1.0)", "Number(2.0)", "Number(3.0)", "Number(4.0)"]
         );
     }
 }

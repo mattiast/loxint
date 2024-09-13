@@ -1,8 +1,9 @@
 use crate::syntax::{Statement, VarName};
-use std::{collections::HashMap, mem};
+use std::{collections::HashMap, fmt::Debug, mem, sync::Arc};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value<'src> {
+    // TODO: an own type for "atomic types", i.e. number, boolean, string, nil
     Number(f64),
     Boolean(bool),
     String(String),
@@ -12,10 +13,26 @@ pub enum Value<'src> {
     // And have an "arity" u8
     // Native functions are a separate type, they are a function item
     NativeFunction(NativeFunc),
-    LoxFunction {
-        arguments: Vec<VarName<'src>>,
-        body: Statement<'src>,
-    },
+    Function(LoxFunction<'src>),
+}
+#[derive(Clone)]
+pub struct LoxFunction<'src> {
+    pub arguments: Vec<VarName<'src>>,
+    pub body: Statement<'src>,
+    pub env: Arc<Stack<'src>>,
+}
+impl Debug for LoxFunction<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoxFunction")
+            .field("arguments", &self.arguments)
+            .field("body", &self.body)
+            .finish()
+    }
+}
+impl PartialEq for LoxFunction<'_> {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
 }
 #[derive(PartialEq, Debug, Clone)]
 pub enum NativeFunc {
@@ -23,7 +40,7 @@ pub enum NativeFunc {
 }
 
 pub struct EvalEnv<'a> {
-    values: HashMap<VarName<'a>, Value>,
+    values: HashMap<VarName<'a>, Value<'a>>,
 }
 pub struct NotFound;
 
@@ -33,13 +50,13 @@ impl<'a> EvalEnv<'a> {
             values: HashMap::new(),
         }
     }
-    pub fn lookup(&self, name: &VarName) -> Option<Value> {
+    pub fn lookup(&self, name: &VarName<'a>) -> Option<Value<'a>> {
         self.values.get(name).cloned()
     }
     pub fn is_defined(&self, name: &VarName<'a>) -> bool {
         self.values.contains_key(name)
     }
-    pub fn set(&mut self, name: VarName<'a>, value: Value) {
+    pub fn set(&mut self, name: VarName<'a>, value: Value<'a>) {
         self.values.insert(name, value);
     }
 }
@@ -78,7 +95,7 @@ impl<'src> Stack<'src> {
         // No huh huh
         *self = *self.parent.take().unwrap();
     }
-    pub fn lookup(&self, name: &VarName<'src>) -> Option<Value> {
+    pub fn lookup(&self, name: &VarName<'src>) -> Option<Value<'src>> {
         if let Some(x) = self.get_env().lookup(name) {
             Some(x)
         } else if let Some(parent) = self.parent.as_ref() {
@@ -87,7 +104,7 @@ impl<'src> Stack<'src> {
             None
         }
     }
-    pub fn assign(&mut self, name: VarName<'src>, value: Value) -> Result<(), NotFound> {
+    pub fn assign(&mut self, name: VarName<'src>, value: Value<'src>) -> Result<(), NotFound> {
         if self.get_env().is_defined(&name) {
             self.get_mut_env().set(name, value);
             Ok(())
@@ -97,14 +114,14 @@ impl<'src> Stack<'src> {
             Err(NotFound)
         }
     }
-    pub fn declare(&mut self, name: VarName<'src>, value: Value) {
+    pub fn declare(&mut self, name: VarName<'src>, value: Value<'src>) {
         self.get_mut_env().set(name, value);
     }
 }
 
 /// Runtime dependencies for lox programs
 pub trait Deps {
-    fn print(&mut self, value: Value);
+    fn print<'src>(&mut self, value: Value<'src>);
     fn clock(&mut self) -> f64;
 }
 
