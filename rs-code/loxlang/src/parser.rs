@@ -29,15 +29,8 @@ where
             let e = self.parse_expr()?;
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
             Ok(Statement::Print(e))
-        } else if self.match_and_consume(Token::Symbol(Symbol::LeftBrace)) {
-            let mut decls = Vec::new();
-            while !self.done() {
-                if self.match_and_consume(Token::Symbol(Symbol::RightBrace)) {
-                    break;
-                }
-                decls.push(self.parse_declaration()?);
-            }
-            Ok(Statement::Block(decls))
+        } else if self.peek() == Some(&Token::Symbol(Symbol::LeftBrace)) {
+            self.parse_block()
         } else if self.match_and_consume(Token::Reserved(Reserved::IF)) {
             self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
             let e = self.parse_expr()?;
@@ -131,6 +124,17 @@ where
         } else {
             self.parse_statement().map(Declaration::Statement)
         }
+    }
+    fn parse_block(&mut self) -> Result<Statement<'src>, ParseError> {
+        self.consume(&[Token::Symbol(Symbol::LeftBrace)])?;
+        let mut decls = Vec::new();
+        while !self.match_and_consume(Token::Symbol(Symbol::RightBrace)) {
+            decls.push(self.parse_declaration()?);
+        }
+        Ok(Statement::Block(decls))
+    }
+    fn peek(&self) -> Option<&Token<'src>> {
+        self.remaining.first()
     }
     pub fn parse_expr(&mut self) -> Result<Expression<'src>, ParseError> {
         self.parse_assignment()
