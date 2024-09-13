@@ -39,12 +39,12 @@ pub enum NativeFunc {
     Clock,
 }
 
-pub struct EvalEnv<'a> {
+struct StackFrame<'a> {
     values: HashMap<VarName<'a>, Value<'a>>,
 }
 pub struct NotFound;
 
-impl<'a> EvalEnv<'a> {
+impl<'a> StackFrame<'a> {
     pub fn new() -> Self {
         Self {
             values: HashMap::new(),
@@ -62,12 +62,12 @@ impl<'a> EvalEnv<'a> {
 }
 
 pub struct Stack<'src> {
-    env: EvalEnv<'src>,
+    env: StackFrame<'src>,
     parent: Option<Box<Stack<'src>>>,
 }
 impl<'src> Stack<'src> {
     pub fn new() -> Self {
-        let mut global_env = EvalEnv::new();
+        let mut global_env = StackFrame::new();
         global_env.set(VarName("clock"), Value::NativeFunction(NativeFunc::Clock));
 
         Self {
@@ -75,10 +75,10 @@ impl<'src> Stack<'src> {
             parent: None,
         }
     }
-    pub fn get_env<'a>(&'a self) -> &'a EvalEnv<'src> {
+    fn get_env<'a>(&'a self) -> &'a StackFrame<'src> {
         &self.env
     }
-    pub fn get_mut_env<'a>(&'a mut self) -> &'a mut EvalEnv<'src> {
+    fn get_mut_env<'a>(&'a mut self) -> &'a mut StackFrame<'src> {
         &mut self.env
     }
     fn go_to_local_env(&mut self) {
@@ -86,7 +86,7 @@ impl<'src> Stack<'src> {
         // TODO make this less awful
         let old = mem::replace(self, Self::new());
         let new = Self {
-            env: EvalEnv::new(),
+            env: StackFrame::new(),
             parent: Some(Box::new(old)),
         };
         *self = new;
