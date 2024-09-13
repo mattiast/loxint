@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
@@ -6,7 +8,10 @@ type EvalError = ();
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
-pub fn eval<'src>(e: &Expression<'src>, stack: &mut Stack<'src>) -> Result<Value<'src>, EvalError> {
+pub fn eval<'src, Dep: Deps>(
+    e: &Expression<'src>,
+    stack: &mut ExecEnv<'src, Dep>,
+) -> Result<Value<'src>, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
@@ -103,11 +108,11 @@ pub fn run_statement<'src, Dep: Deps>(
 ) -> Result<(), EvalError> {
     match s {
         Statement::Expression(e) => {
-            let _ = eval(e, env.get_stack_mut())?;
+            let _ = eval(e, env)?;
             Ok(())
         }
         Statement::Print(e) => {
-            let v = eval(e, env.get_stack_mut())?;
+            let v = eval(e, env)?;
             env.print(v);
             Ok(())
         }
@@ -118,7 +123,7 @@ pub fn run_statement<'src, Dep: Deps>(
             Ok(())
         }),
         Statement::If(cond, stmt_then, stmt_else) => {
-            let cond_val = eval(cond, env.get_stack_mut())?;
+            let cond_val = eval(cond, env)?;
             match cond_val {
                 Value::Boolean(true) => run_statement(stmt_then, env),
                 Value::Boolean(false) => {
@@ -132,7 +137,7 @@ pub fn run_statement<'src, Dep: Deps>(
             }
         }
         Statement::While(cond, body) => loop {
-            let cond_val = eval(cond, env.get_stack_mut())?;
+            let cond_val = eval(cond, env)?;
             match cond_val {
                 Value::Boolean(true) => run_statement(body, env)?,
                 Value::Boolean(false) => {
@@ -153,7 +158,7 @@ pub fn run_statement<'src, Dep: Deps>(
                     }
                     None => {
                         if let Some(ref start) = loopdef.start {
-                            eval(start, env.get_stack_mut())?;
+                            eval(start, env)?;
                         }
                         Ok(())
                     }
@@ -161,7 +166,7 @@ pub fn run_statement<'src, Dep: Deps>(
                 loop {
                     // Evaluate the condition
                     let cond_val = if let Some(ref cond) = loopdef.cond {
-                        let cond_val = eval(cond, env.get_stack_mut())?;
+                        let cond_val = eval(cond, env)?;
                         match cond_val {
                             Value::Boolean(x) => x,
                             _ => {
@@ -179,7 +184,7 @@ pub fn run_statement<'src, Dep: Deps>(
                     run_statement(body, env)?;
                     // Evaluate the increment
                     if let Some(ref inc) = loopdef.increment {
-                        eval(inc, env.get_stack_mut())?;
+                        eval(inc, env)?;
                     }
                 }
             })
@@ -193,8 +198,8 @@ pub fn run_declaration<'src, Dep: Deps>(
 ) -> Result<(), EvalError> {
     match s {
         Declaration::Var(s, e) => {
-            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env.get_stack_mut())?;
-            env.get_stack_mut().declare(s.clone(), v);
+            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env)?;
+            env.declare(s.clone(), v);
             Ok(())
         }
         Declaration::Statement(stmt) => run_statement(stmt, env),
@@ -204,8 +209,7 @@ pub fn run_declaration<'src, Dep: Deps>(
                 body: body.clone(),
                 env: todo!(),
             };
-            env.get_stack_mut()
-                .declare(name.clone(), Value::Function(func));
+            env.declare(name.clone(), Value::Function(func));
         }
     }
 }

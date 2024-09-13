@@ -1,5 +1,11 @@
 use crate::syntax::{Statement, VarName};
-use std::{collections::HashMap, fmt::Debug, mem, sync::Arc};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    mem,
+    ops::DerefMut,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value<'src> {
@@ -141,33 +147,24 @@ impl Deps for DefaultDeps {
 }
 
 pub struct ExecEnv<'src, Dep: Deps> {
-    stack: Stack<'src>,
+    pub stack: Arc<Mutex<Stack<'src>>>,
     deps: Dep,
 }
 
 impl<'src> ExecEnv<'src, DefaultDeps> {
     pub fn new_default() -> Self {
-        Self {
-            stack: Stack::new(),
-            deps: DefaultDeps,
-        }
+        Self::new(DefaultDeps)
     }
 }
 impl<'src, Dep: Deps> ExecEnv<'src, Dep> {
     pub fn new(deps: Dep) -> Self {
         Self {
-            stack: Stack::new(),
+            stack: Arc::new(Mutex::new(Stack::new())),
             deps,
         }
     }
     pub fn into_deps(self) -> Dep {
         self.deps
-    }
-    pub fn get_stack(&self) -> &Stack<'src> {
-        &self.stack
-    }
-    pub fn get_stack_mut(&mut self) -> &mut Stack<'src> {
-        &mut self.stack
     }
     pub fn print(&mut self, value: Value) {
         self.deps.print(value);
@@ -175,14 +172,23 @@ impl<'src, Dep: Deps> ExecEnv<'src, Dep> {
     pub fn clock(&mut self) -> f64 {
         self.deps.clock()
     }
+    pub fn lookup(&self, name: &VarName<'src>) -> Option<Value<'src>> {
+        self.stack.lock().unwrap().lookup(name)
+    }
+    pub fn assign(&mut self, name: VarName<'src>, value: Value<'src>) -> Result<(), NotFound> {
+        self.stack.lock().unwrap().assign(name, value)
+    }
+    pub fn declare(&mut self, name: VarName<'src>, value: Value<'src>) {
+        self.stack.lock().unwrap().declare(name, value)
+    }
     pub fn run_in_substack<F, U>(&mut self, f: F) -> U
     where
         F: FnOnce(&mut ExecEnv<'src, Dep>) -> U,
     {
         // TODO this is screaming for RAII
-        self.stack.go_to_local_env();
+        self.stack.lock().unwrap().go_to_local_env();
         let v = f(self);
-        self.stack.go_to_parent_env();
+        self.stack.lock().unwrap().go_to_parent_env();
         v
     }
 }
