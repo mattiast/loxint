@@ -6,10 +6,7 @@ type EvalError = ();
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
-pub fn eval<'src, 'scope>(
-    e: &Expression<'src>,
-    stack: &mut Stack<'src>,
-) -> Result<Value, EvalError> {
+pub fn eval<'src>(e: &Expression<'src>, stack: &mut Stack<'src>) -> Result<Value, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
