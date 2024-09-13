@@ -30,6 +30,11 @@ pub struct VarName<'a>(pub &'a str);
 #[derive(Debug)]
 pub enum Declaration<'a> {
     Var(VarName<'a>, Option<Expression<'a>>),
+    Function {
+        name: VarName<'a>,
+        args: Vec<VarName<'a>>,
+        body: Statement<'a>,
+    },
     Statement(Statement<'a>),
 }
 

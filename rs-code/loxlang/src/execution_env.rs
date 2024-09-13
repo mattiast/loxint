@@ -1,8 +1,8 @@
-use crate::syntax::VarName;
+use crate::syntax::{Statement, VarName};
 use std::{collections::HashMap, mem};
 
-#[derive(PartialEq, Debug, Clone)]
-pub enum Value {
+#[derive(Debug)]
+pub enum Value<'src> {
     Number(f64),
     Boolean(bool),
     String(String),
@@ -12,6 +12,10 @@ pub enum Value {
     // And have an "arity" u8
     // Native functions are a separate type, they are a function item
     NativeFunction(NativeFunc),
+    LoxFunction {
+        arguments: Vec<VarName<'src>>,
+        body: Statement<'src>,
+    },
 }
 #[derive(PartialEq, Debug, Clone)]
 pub enum NativeFunc {

@@ -121,6 +121,25 @@ where
             };
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
             Ok(Declaration::Var(name, value))
+        } else if self.match_and_consume(Token::Reserved(Reserved::FUN)) {
+            let name = self.parse_identifier()?;
+            let mut args = Vec::new();
+            self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+            if self.match_and_consume(Token::Symbol(Symbol::RightParen)) {
+                // no params
+            } else {
+                loop {
+                    let arg_name = self.parse_identifier()?;
+                    args.push(arg_name);
+                    if !self.match_and_consume(Token::Symbol(Symbol::COMMA)) {
+                        break;
+                    }
+                }
+                self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            }
+
+            let body = self.parse_block()?;
+            Ok(Declaration::Function { name, args, body })
         } else {
             self.parse_statement().map(Declaration::Statement)
         }
