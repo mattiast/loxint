@@ -205,7 +205,7 @@ where
             }
             Some(Token::StringLiteral(s)) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::StringLiteral(s.to_string()))
+                Ok(Expression::StringLiteral(s))
             }
             Some(Token::Reserved(Reserved::FALSE)) => {
                 self.remaining = &self.remaining[1..];
