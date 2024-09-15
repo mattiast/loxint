@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};

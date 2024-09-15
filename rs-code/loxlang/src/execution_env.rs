@@ -2,8 +2,6 @@ use crate::syntax::{Statement, VarName};
 use std::{
     collections::HashMap,
     fmt::Debug,
-    mem,
-    ops::DerefMut,
     sync::{Arc, Mutex},
 };
 
@@ -25,7 +23,7 @@ pub enum Value<'src> {
 pub struct LoxFunction<'src> {
     pub arguments: Vec<VarName<'src>>,
     pub body: Statement<'src>,
-    pub env: Arc<Stack<'src>>,
+    pub env: Stack<'src>,
 }
 impl Debug for LoxFunction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -67,61 +65,76 @@ impl<'a> StackFrame<'a> {
     }
 }
 
+/// A stack of mutable environments
+/// The environments have interior mutability
+#[derive(Clone)]
 pub struct Stack<'src> {
-    env: StackFrame<'src>,
-    parent: Option<Box<Stack<'src>>>,
+    head: StackRef<'src>,
+}
+type StackRef<'src> = Arc<Node<'src>>;
+struct Node<'src> {
+    env: Mutex<StackFrame<'src>>,
+    parent: Option<StackRef<'src>>,
 }
 impl<'src> Stack<'src> {
     pub fn new() -> Self {
         let mut global_env = StackFrame::new();
         global_env.set(VarName("clock"), Value::NativeFunction(NativeFunc::Clock));
 
-        Self {
-            env: global_env,
+        let node = Node {
+            env: Mutex::new(global_env),
             parent: None,
+        };
+        Self {
+            head: Arc::new(node),
         }
     }
-    fn get_env<'a>(&'a self) -> &'a StackFrame<'src> {
-        &self.env
-    }
-    fn get_mut_env<'a>(&'a mut self) -> &'a mut StackFrame<'src> {
-        &mut self.env
+    fn get_env<'a>(&'a self) -> &'a Mutex<StackFrame<'src>> {
+        &self.head.env
     }
     fn go_to_local_env(&mut self) {
-        // No huh huh
-        // TODO make this less awful
-        let old = mem::replace(self, Self::new());
-        let new = Self {
-            env: StackFrame::new(),
-            parent: Some(Box::new(old)),
-        };
-        *self = new;
+        // Can we get rid of clone?
+        // The old head is copied but also thrown away
+        self.head = Arc::new(Node {
+            env: Mutex::new(StackFrame::new()),
+            parent: Some(self.head.clone()),
+        });
     }
     fn go_to_parent_env(&mut self) {
         // No huh huh
-        *self = *self.parent.take().unwrap();
+        self.head = self.head.as_ref().parent.clone().unwrap();
     }
     pub fn lookup(&self, name: &VarName<'src>) -> Option<Value<'src>> {
-        if let Some(x) = self.get_env().lookup(name) {
-            Some(x)
-        } else if let Some(parent) = self.parent.as_ref() {
-            parent.lookup(name)
-        } else {
-            None
+        let mut node = self.head.as_ref();
+        loop {
+            if let Some(x) = node.env.lock().unwrap().lookup(name) {
+                return Some(x);
+            }
+            if let Some(parent) = node.parent.as_ref() {
+                node = parent.as_ref();
+            } else {
+                return None;
+            }
         }
     }
-    pub fn assign(&mut self, name: VarName<'src>, value: Value<'src>) -> Result<(), NotFound> {
-        if self.get_env().is_defined(&name) {
-            self.get_mut_env().set(name, value);
-            Ok(())
-        } else if let Some(parent) = self.parent.as_mut() {
-            parent.assign(name, value)
-        } else {
-            Err(NotFound)
+    pub fn assign(&self, name: VarName<'src>, value: Value<'src>) -> Result<(), NotFound> {
+        let mut node = self.head.as_ref();
+        loop {
+            let mut g = node.env.lock().unwrap();
+            if g.is_defined(&name) {
+                g.set(name, value);
+                return Ok(());
+            }
+            drop(g);
+            if let Some(parent) = node.parent.as_ref() {
+                node = parent.as_ref();
+            } else {
+                return Err(NotFound);
+            }
         }
     }
     pub fn declare(&mut self, name: VarName<'src>, value: Value<'src>) {
-        self.get_mut_env().set(name, value);
+        self.get_env().lock().unwrap().set(name, value);
     }
 }
 
@@ -147,7 +160,7 @@ impl Deps for DefaultDeps {
 }
 
 pub struct ExecEnv<'src, Dep: Deps> {
-    pub stack: Arc<Mutex<Stack<'src>>>,
+    stack: Arc<Mutex<Stack<'src>>>,
     deps: Dep,
 }
 
