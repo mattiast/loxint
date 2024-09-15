@@ -19,3 +19,10 @@ while (a < 1000) {
     a = a + b;
     b = a - b;
 }
+
+fun f(x) {
+    print x/2;
+}
+for(var i = 0; i<10; i = i+1) {
+    f(i+1);
+}
