@@ -29,15 +29,8 @@ where
             let e = self.parse_expr()?;
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
             Ok(Statement::Print(e))
-        } else if self.match_and_consume(Token::Symbol(Symbol::LeftBrace)) {
-            let mut decls = Vec::new();
-            while !self.done() {
-                if self.match_and_consume(Token::Symbol(Symbol::RightBrace)) {
-                    break;
-                }
-                decls.push(self.parse_declaration()?);
-            }
-            Ok(Statement::Block(decls))
+        } else if self.peek() == Some(&Token::Symbol(Symbol::LeftBrace)) {
+            self.parse_block()
         } else if self.match_and_consume(Token::Reserved(Reserved::IF)) {
             self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
             let e = self.parse_expr()?;
@@ -128,9 +121,39 @@ where
             };
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
             Ok(Declaration::Var(name, value))
+        } else if self.match_and_consume(Token::Reserved(Reserved::FUN)) {
+            let name = self.parse_identifier()?;
+            let mut args = Vec::new();
+            self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
+            if self.match_and_consume(Token::Symbol(Symbol::RightParen)) {
+                // no params
+            } else {
+                loop {
+                    let arg_name = self.parse_identifier()?;
+                    args.push(arg_name);
+                    if !self.match_and_consume(Token::Symbol(Symbol::COMMA)) {
+                        break;
+                    }
+                }
+                self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            }
+
+            let body = self.parse_block()?;
+            Ok(Declaration::Function { name, args, body })
         } else {
             self.parse_statement().map(Declaration::Statement)
         }
+    }
+    fn parse_block(&mut self) -> Result<Statement<'src>, ParseError> {
+        self.consume(&[Token::Symbol(Symbol::LeftBrace)])?;
+        let mut decls = Vec::new();
+        while !self.match_and_consume(Token::Symbol(Symbol::RightBrace)) {
+            decls.push(self.parse_declaration()?);
+        }
+        Ok(Statement::Block(decls))
+    }
+    fn peek(&self) -> Option<&Token<'src>> {
+        self.remaining.first()
     }
     pub fn parse_expr(&mut self) -> Result<Expression<'src>, ParseError> {
         self.parse_assignment()
@@ -232,7 +255,7 @@ where
             None
         };
         match operator {
-            None => self.parse_primary(),
+            None => self.parse_call(),
             Some(operator) => {
                 let right = self.parse_unary()?;
                 Ok(Expression::Unary {
@@ -241,6 +264,27 @@ where
                 })
             }
         }
+    }
+    fn parse_call(&mut self) -> Result<Expression<'src>, ParseError> {
+        let mut expr = self.parse_primary()?;
+        // Parse any number of calls
+        while self.match_and_consume(Token::Symbol(Symbol::LeftParen)) {
+            let mut args = vec![];
+            if !self.match_and_consume(Token::Symbol(Symbol::RightParen)) {
+                loop {
+                    args.push(self.parse_expr()?);
+                    if !self.match_and_consume(Token::Symbol(Symbol::COMMA)) {
+                        break;
+                    }
+                }
+                self.consume(&[Token::Symbol(Symbol::RightParen)])?;
+            }
+            if args.len() > 254 {
+                return Err(ParseError::Bad);
+            }
+            expr = Expression::FunctionCall(Box::new(expr), args);
+        }
+        Ok(expr)
     }
 
     fn parse_factor(&mut self) -> Result<Expression<'src>, ParseError> {

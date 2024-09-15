@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement<'a> {
     Expression(Expression<'a>),
     Print(Expression<'a>),
@@ -10,13 +10,14 @@ pub enum Statement<'a> {
     ),
     While(Expression<'a>, Box<Statement<'a>>),
     For(ForLoopDef<'a>, Box<Statement<'a>>),
+    // Return(Expression<'a>),
 }
 /// Combination of `var_name` and `start` has 4 cases:
 /// 1. var_name is Some and start is Some: this is `var x = 0;` case, the most typical one
 /// 2. var_name is Some and start is None: this is `var x;` case, it is pretty weird but could happen I guess
 /// 3. var_name is None and start is Some: this is `x = 0;` case where an existing variable is used, and the expression is typically an assignment
 /// 4. Both are none: here the first part is empty `for(;...)`, initialization is done outside the loop
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ForLoopDef<'a> {
     pub var_name: Option<VarName<'a>>,
     pub start: Option<Expression<'a>>,
@@ -27,9 +28,14 @@ pub struct ForLoopDef<'a> {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct VarName<'a>(pub &'a str);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Declaration<'a> {
     Var(VarName<'a>, Option<Expression<'a>>),
+    Function {
+        name: VarName<'a>,
+        args: Vec<VarName<'a>>,
+        body: Statement<'a>,
+    },
     Statement(Statement<'a>),
 }
 
@@ -54,6 +60,7 @@ pub enum Expression<'a> {
         right: Box<Expression<'a>>,
     },
     Assignment(VarName<'a>, Box<Expression<'a>>),
+    FunctionCall(Box<Expression<'a>>, Vec<Expression<'a>>),
     // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
     // TODO Should there be some link to where this was defined in the source?
     // Generic annotation for each node?
@@ -107,6 +114,16 @@ impl<'a> Expression<'a> {
                 )
             }
             Expression::Assignment(VarName(s), e) => format!("(SET {} {})", s, e.pretty_print()),
+            Expression::FunctionCall(e, args) => {
+                format!(
+                    "(CALL {} {})",
+                    e.pretty_print(),
+                    args.iter()
+                        .map(|arg| arg.pretty_print())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            }
         }
     }
 }

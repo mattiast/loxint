@@ -36,8 +36,8 @@ fn main() {
                 eprintln!("Unparsed tokens");
             }
             println!("{:?}", e);
-            let mut stack = loxlang::execution_env::Stack::new();
-            println!("{:?}", loxlang::eval_expr::eval(&e, &mut stack));
+            let mut env = loxlang::execution_env::ExecEnv::new_default();
+            println!("{:?}", loxlang::eval_expr::eval(&e, &mut env));
         }
     }
 }

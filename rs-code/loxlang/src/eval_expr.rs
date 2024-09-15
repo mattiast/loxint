@@ -1,4 +1,4 @@
-use crate::execution_env::{Deps, ExecEnv, NotFound, Stack, Value};
+use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
@@ -6,10 +6,10 @@ type EvalError = ();
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
-pub fn eval<'src, 'scope>(
+pub fn eval<'src, Dep: Deps>(
     e: &Expression<'src>,
-    stack: &mut Stack<'src>,
-) -> Result<Value, EvalError> {
+    stack: &mut ExecEnv<'src, Dep>,
+) -> Result<Value<'src>, EvalError> {
     match e {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
@@ -96,6 +96,37 @@ pub fn eval<'src, 'scope>(
                 Err(NotFound) => Err(()),
             }
         }
+        Expression::FunctionCall(f, args) => {
+            let f = eval(f, stack)?;
+            let args = args
+                .iter()
+                .map(|a| eval(a, stack))
+                .collect::<Result<Vec<_>, _>>()?;
+            match f {
+                Value::Function(f) => {
+                    if args.len() != f.arguments.len() {
+                        return Err(());
+                    }
+                    stack.run_in_substack(|stack| {
+                        for (arg_name, arg_value) in f.arguments.iter().zip(args.into_iter()) {
+                            stack.declare(arg_name.clone(), arg_value);
+                        }
+                        run_statement(&f.body, stack)?;
+                        // TODO return values
+                        // Should run_statement take a Continuation as a parameter??
+                        Ok(Value::Nil)
+                    })
+                }
+                Value::NativeFunction(NativeFunc::Clock) => {
+                    if args.is_empty() {
+                        Ok(Value::Number(stack.clock()))
+                    } else {
+                        Err(())
+                    }
+                }
+                _ => Err(()),
+            }
+        }
     }
 }
 
@@ -105,11 +136,11 @@ pub fn run_statement<'src, Dep: Deps>(
 ) -> Result<(), EvalError> {
     match s {
         Statement::Expression(e) => {
-            let _ = eval(e, env.get_stack_mut())?;
+            let _ = eval(e, env)?;
             Ok(())
         }
         Statement::Print(e) => {
-            let v = eval(e, env.get_stack_mut())?;
+            let v = eval(e, env)?;
             env.print(v);
             Ok(())
         }
@@ -120,7 +151,7 @@ pub fn run_statement<'src, Dep: Deps>(
             Ok(())
         }),
         Statement::If(cond, stmt_then, stmt_else) => {
-            let cond_val = eval(cond, env.get_stack_mut())?;
+            let cond_val = eval(cond, env)?;
             match cond_val {
                 Value::Boolean(true) => run_statement(stmt_then, env),
                 Value::Boolean(false) => {
@@ -134,7 +165,7 @@ pub fn run_statement<'src, Dep: Deps>(
             }
         }
         Statement::While(cond, body) => loop {
-            let cond_val = eval(cond, env.get_stack_mut())?;
+            let cond_val = eval(cond, env)?;
             match cond_val {
                 Value::Boolean(true) => run_statement(body, env)?,
                 Value::Boolean(false) => {
@@ -155,7 +186,7 @@ pub fn run_statement<'src, Dep: Deps>(
                     }
                     None => {
                         if let Some(ref start) = loopdef.start {
-                            eval(start, env.get_stack_mut())?;
+                            eval(start, env)?;
                         }
                         Ok(())
                     }
@@ -163,7 +194,7 @@ pub fn run_statement<'src, Dep: Deps>(
                 loop {
                     // Evaluate the condition
                     let cond_val = if let Some(ref cond) = loopdef.cond {
-                        let cond_val = eval(cond, env.get_stack_mut())?;
+                        let cond_val = eval(cond, env)?;
                         match cond_val {
                             Value::Boolean(x) => x,
                             _ => {
@@ -181,7 +212,7 @@ pub fn run_statement<'src, Dep: Deps>(
                     run_statement(body, env)?;
                     // Evaluate the increment
                     if let Some(ref inc) = loopdef.increment {
-                        eval(inc, env.get_stack_mut())?;
+                        eval(inc, env)?;
                     }
                 }
             })
@@ -195,11 +226,20 @@ pub fn run_declaration<'src, Dep: Deps>(
 ) -> Result<(), EvalError> {
     match s {
         Declaration::Var(s, e) => {
-            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env.get_stack_mut())?;
-            env.get_stack_mut().declare(s.clone(), v);
+            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env)?;
+            env.declare(s.clone(), v);
             Ok(())
         }
         Declaration::Statement(stmt) => run_statement(stmt, env),
+        Declaration::Function { name, args, body } => {
+            let func = LoxFunction {
+                arguments: args.clone(),
+                body: body.clone(),
+                env: env.stack.clone(),
+            };
+            env.declare(name.clone(), Value::Function(func));
+            Ok(())
+        }
     }
 }
 
@@ -212,14 +252,17 @@ mod tests {
 
     use super::*;
     struct TestDeps {
-        printed: Vec<Value>,
+        printed: Vec<String>,
+        time: f64,
     }
     impl Deps for TestDeps {
-        fn print(&mut self, v: Value) {
-            self.printed.push(v);
+        fn print<'src>(&mut self, v: Value<'src>) {
+            self.printed.push(format!("{v:?}"));
         }
         fn clock(&mut self) -> f64 {
-            0.0
+            let time = self.time;
+            self.time += 1.0;
+            time
         }
     }
 
@@ -227,6 +270,7 @@ mod tests {
     fn run_program() {
         let deps = TestDeps {
             printed: Vec::new(),
+            time: 0.0,
         };
         let mut env = ExecEnv::new(deps);
         // Define program as a multiline string, and parse it
@@ -247,22 +291,24 @@ mod tests {
             run_declaration(&stmt, &mut env).unwrap();
         }
         let deps = env.into_deps();
-        assert_eq!(
-            deps.printed,
-            vec![Value::String("hi".to_string()), Value::Number(4.0)]
-        );
+        assert_eq!(deps.printed, vec!["String(\"hi\")", "Number(4.0)"]);
     }
     #[test]
     fn for_loop() {
         let deps = TestDeps {
             printed: Vec::new(),
+            time: 0.0,
         };
         let mut env = ExecEnv::new(deps);
         // Define program as a multiline string, and parse it
         let source = r#"
-            for(var a = 1; a <= 4; a = a+1) {
-                print a;
+            fun f() {
+                for(var a = 1; a <= 4; a = a+1) {
+                    var t = clock();
+                    print a+t;
+                }
             }
+            f();
         "#;
         let (rest, tokens) = parse_tokens(source).unwrap();
         assert_eq!(rest, "");
@@ -274,12 +320,7 @@ mod tests {
         let deps = env.into_deps();
         assert_eq!(
             deps.printed,
-            vec![
-                Value::Number(1.0),
-                Value::Number(2.0),
-                Value::Number(3.0),
-                Value::Number(4.0)
-            ]
+            vec!["Number(1.0)", "Number(3.0)", "Number(5.0)", "Number(7.0)"]
         );
     }
 }
