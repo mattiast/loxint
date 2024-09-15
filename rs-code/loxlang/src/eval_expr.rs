@@ -1,4 +1,4 @@
-use crate::execution_env::{Deps, ExecEnv, LoxFunction, NotFound, Stack, Value};
+use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Stack, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
@@ -96,7 +96,37 @@ pub fn eval<'src, Dep: Deps>(
                 Err(NotFound) => Err(()),
             }
         }
-        Expression::FunctionCall(_, _) => todo!(),
+        Expression::FunctionCall(f, args) => {
+            let f = eval(f, stack)?;
+            let args = args
+                .iter()
+                .map(|a| eval(a, stack))
+                .collect::<Result<Vec<_>, _>>()?;
+            match f {
+                Value::Function(f) => {
+                    if args.len() != f.arguments.len() {
+                        return Err(());
+                    }
+                    stack.run_in_substack(|stack| {
+                        for (arg_name, arg_value) in f.arguments.iter().zip(args.into_iter()) {
+                            stack.declare(arg_name.clone(), arg_value);
+                        }
+                        run_statement(&f.body, stack)?;
+                        // TODO return values
+                        // Should run_statement take a Continuation as a parameter??
+                        Ok(Value::Nil)
+                    })
+                }
+                Value::NativeFunction(NativeFunc::Clock) => {
+                    if args.is_empty() {
+                        Ok(Value::Number(stack.clock()))
+                    } else {
+                        Err(())
+                    }
+                }
+                _ => Err(()),
+            }
+        }
     }
 }
 
@@ -223,13 +253,16 @@ mod tests {
     use super::*;
     struct TestDeps {
         printed: Vec<String>,
+        time: f64,
     }
     impl Deps for TestDeps {
         fn print<'src>(&mut self, v: Value<'src>) {
             self.printed.push(format!("{v:?}"));
         }
         fn clock(&mut self) -> f64 {
-            0.0
+            let time = self.time;
+            self.time += 1.0;
+            time
         }
     }
 
@@ -237,6 +270,7 @@ mod tests {
     fn run_program() {
         let deps = TestDeps {
             printed: Vec::new(),
+            time: 0.0,
         };
         let mut env = ExecEnv::new(deps);
         // Define program as a multiline string, and parse it
@@ -263,13 +297,18 @@ mod tests {
     fn for_loop() {
         let deps = TestDeps {
             printed: Vec::new(),
+            time: 0.0,
         };
         let mut env = ExecEnv::new(deps);
         // Define program as a multiline string, and parse it
         let source = r#"
-            for(var a = 1; a <= 4; a = a+1) {
-                print a;
+            fun f() {
+                for(var a = 1; a <= 4; a = a+1) {
+                    var t = clock();
+                    print a+t;
+                }
             }
+            f();
         "#;
         let (rest, tokens) = parse_tokens(source).unwrap();
         assert_eq!(rest, "");
@@ -281,7 +320,7 @@ mod tests {
         let deps = env.into_deps();
         assert_eq!(
             deps.printed,
-            vec!["Number(1.0)", "Number(2.0)", "Number(3.0)", "Number(4.0)"]
+            vec!["Number(1.0)", "Number(3.0)", "Number(5.0)", "Number(7.0)"]
         );
     }
 }
