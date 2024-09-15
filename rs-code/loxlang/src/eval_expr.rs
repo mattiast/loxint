@@ -275,14 +275,24 @@ mod tests {
         }
     }
 
-    #[test]
-    fn run_program() {
+    fn get_output(source: &str) -> Vec<String> {
         let deps = TestDeps {
             printed: Vec::new(),
             time: 0.0,
         };
         let mut env = ExecEnv::new(deps);
-        // Define program as a multiline string, and parse it
+        let (rest, tokens) = parse_tokens(source).unwrap();
+        assert_eq!(rest, "");
+        let mut parser = parser::Parser::new(&tokens);
+        let program = parser.parse_program().unwrap();
+        for stmt in program.decls {
+            run_declaration(&stmt, &mut env).unwrap();
+        }
+        env.into_deps().printed
+    }
+
+    #[test]
+    fn run_program() {
         let source = r#"
             var a = "hi";
             var b = 3;
@@ -292,24 +302,11 @@ mod tests {
             print b+1;
             }
         "#;
-        let (rest, tokens) = parse_tokens(source).unwrap();
-        assert_eq!(rest, "");
-        let mut parser = parser::Parser::new(&tokens);
-        let program = parser.parse_program().unwrap();
-        for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
-        }
-        let deps = env.into_deps();
-        assert_eq!(deps.printed, vec!["String(\"hi\")", "Number(4.0)"]);
+        let output = get_output(source);
+        assert_eq!(output, vec!["String(\"hi\")", "Number(4.0)"]);
     }
     #[test]
     fn for_loop() {
-        let deps = TestDeps {
-            printed: Vec::new(),
-            time: 0.0,
-        };
-        let mut env = ExecEnv::new(deps);
-        // Define program as a multiline string, and parse it
         let source = r#"
             fun f() {
                 for(var a = 1; a <= 4; a = a+1) {
@@ -319,27 +316,14 @@ mod tests {
             }
             f();
         "#;
-        let (rest, tokens) = parse_tokens(source).unwrap();
-        assert_eq!(rest, "");
-        let mut parser = parser::Parser::new(&tokens);
-        let program = parser.parse_program().unwrap();
-        for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
-        }
-        let deps = env.into_deps();
+        let output = get_output(source);
         assert_eq!(
-            deps.printed,
+            output,
             vec!["Number(1.0)", "Number(3.0)", "Number(5.0)", "Number(7.0)"]
         );
     }
     #[test]
     fn closure() {
-        let deps = TestDeps {
-            printed: Vec::new(),
-            time: 0.0,
-        };
-        let mut env = ExecEnv::new(deps);
-        // Define program as a multiline string, and parse it
         let source = r#"
             var f = 0;
             {
@@ -352,17 +336,25 @@ mod tests {
             }
             f();f();f();
         "#;
-        let (rest, tokens) = parse_tokens(source).unwrap();
-        assert_eq!(rest, "");
-        let mut parser = parser::Parser::new(&tokens);
-        let program = parser.parse_program().unwrap();
-        for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
-        }
-        let deps = env.into_deps();
-        assert_eq!(
-            deps.printed,
-            vec!["Number(0.0)", "Number(1.0)", "Number(2.0)"]
-        );
+        let output = get_output(source);
+        assert_eq!(output, vec!["Number(0.0)", "Number(1.0)", "Number(2.0)"]);
+    }
+    #[test]
+    fn resolution() {
+        let source = r#"
+            var a = 1;
+            {
+                fun f() {
+                    print a;
+                }
+                f();
+                var a = 2;
+                f();
+            }
+        "#;
+        let output = get_output(source);
+        // TODO this should be 1,1 but it is 1,2
+        // Resolution needs to be fixed
+        assert_eq!(output, vec!["Number(1.0)", "Number(2.0)"]);
     }
 }
