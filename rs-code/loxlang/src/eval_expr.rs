@@ -1,4 +1,6 @@
-use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Stack, Value};
+use std::mem;
+
+use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
 use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
 
@@ -107,7 +109,12 @@ pub fn eval<'src, Dep: Deps>(
                     if args.len() != f.arguments.len() {
                         return Err(());
                     }
-                    stack.run_in_substack(|stack| {
+                    // We need to temporarily replace the stack with the function's environment,
+                    // evaluate the function body, and then restore the old stack.
+                    // TODO: no huh huh, this should use some sort of RAII or another callback thing
+                    let old_stack = mem::replace(&mut stack.stack, f.env.clone());
+
+                    let result = stack.run_in_substack(|stack| {
                         for (arg_name, arg_value) in f.arguments.iter().zip(args.into_iter()) {
                             stack.declare(arg_name.clone(), arg_value);
                         }
@@ -115,7 +122,9 @@ pub fn eval<'src, Dep: Deps>(
                         // TODO return values
                         // Should run_statement take a Continuation as a parameter??
                         Ok(Value::Nil)
-                    })
+                    });
+                    stack.stack = old_stack;
+                    result
                 }
                 Value::NativeFunction(NativeFunc::Clock) => {
                     if args.is_empty() {
