@@ -40,7 +40,7 @@ pub struct Program<'a> {
 #[derive(Debug, Clone)]
 pub enum Expression<'a> {
     Nil,
-    StringLiteral(String),
+    StringLiteral(&'a str),
     NumberLiteral(f64),
     BooleanLiteral(bool),
     Identifier(VarName<'a>),
