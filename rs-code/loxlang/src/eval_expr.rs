@@ -205,9 +205,10 @@ pub fn run_declaration<'src, Dep: Deps>(
             let func = LoxFunction {
                 arguments: args.clone(),
                 body: body.clone(),
-                env: todo!(),
+                env: env.stack.clone(),
             };
             env.declare(name.clone(), Value::Function(func));
+            Ok(())
         }
     }
 }

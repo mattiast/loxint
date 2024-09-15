@@ -160,7 +160,7 @@ impl Deps for DefaultDeps {
 }
 
 pub struct ExecEnv<'src, Dep: Deps> {
-    stack: Stack<'src>,
+    pub stack: Stack<'src>,
     deps: Dep,
 }
 
