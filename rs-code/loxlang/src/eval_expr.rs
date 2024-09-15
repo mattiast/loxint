@@ -323,4 +323,37 @@ mod tests {
             vec!["Number(1.0)", "Number(3.0)", "Number(5.0)", "Number(7.0)"]
         );
     }
+    #[test]
+    fn closure() {
+        let deps = TestDeps {
+            printed: Vec::new(),
+            time: 0.0,
+        };
+        let mut env = ExecEnv::new(deps);
+        // Define program as a multiline string, and parse it
+        let source = r#"
+            var f = 0;
+            {
+              var a = 0;
+              fun g() {
+                print a;
+                a = a + 1;
+              }
+              f = g;
+            }
+            f();f();f();
+        "#;
+        let (rest, tokens) = parse_tokens(source).unwrap();
+        assert_eq!(rest, "");
+        let mut parser = parser::Parser::new(&tokens);
+        let program = parser.parse_program().unwrap();
+        for stmt in program.decls {
+            run_declaration(&stmt, &mut env).unwrap();
+        }
+        let deps = env.into_deps();
+        assert_eq!(
+            deps.printed,
+            vec!["Number(0.0)", "Number(1.0)", "Number(2.0)"]
+        );
+    }
 }
