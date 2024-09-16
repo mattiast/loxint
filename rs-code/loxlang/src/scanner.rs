@@ -148,6 +148,7 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
 }
 
 pub fn parse_tokens(input: &str) -> IResult<&str, Vec<Token>> {
+    // TODO change the error type to something that makes sense
     let mut tokens = Vec::new();
     let mut input = input.trim_start();
     while !input.is_empty() {
