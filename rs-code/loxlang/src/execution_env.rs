@@ -1,4 +1,4 @@
-use crate::syntax::{Statement, VarName};
+use crate::syntax::{Statement, VarName, Variable};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -79,7 +79,7 @@ struct Node<'src> {
 impl<'src> Stack<'src> {
     pub fn new() -> Self {
         let mut global_env = StackFrame::new();
-        global_env.set(VarName("clock"), Value::NativeFunction(NativeFunc::Clock));
+        global_env.set(Variable("clock"), Value::NativeFunction(NativeFunc::Clock));
 
         let node = Node {
             env: Mutex::new(global_env),

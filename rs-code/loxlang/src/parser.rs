@@ -2,6 +2,7 @@ use crate::{
     scanner::{Reserved, Symbol, Token},
     syntax::{
         BOperator, Declaration, Expression, ForLoopDef, Program, Statement, UOperator, VarName,
+        Variable,
     },
 };
 
@@ -220,7 +221,7 @@ where
             Some(Token::Symbol(Symbol::LeftParen)) => self.parse_grouping(),
             Some(Token::Identifier(id)) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::Identifier(VarName(id)))
+                Ok(Expression::Identifier(Variable(id)))
             }
             Some(Token::NumberLiteral(n)) => {
                 self.remaining = &self.remaining[1..];
@@ -398,7 +399,7 @@ where
         match self.remaining.first() {
             Some(Token::Identifier(s)) => {
                 self.remaining = &self.remaining[1..];
-                Ok(VarName(s))
+                Ok(Variable(s))
             }
             _ => Err(ParseError::Bad),
         }

@@ -26,7 +26,10 @@ pub struct ForLoopDef<'a> {
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct VarName<'a>(pub &'a str);
+pub struct Variable<Var>(pub Var);
+
+pub type VarName<'a> = Variable<&'a str>;
+// TODO Add a type parameter and field for annotation data (name resolution)
 
 #[derive(Debug, Clone)]
 pub enum Declaration<'a> {
@@ -97,7 +100,7 @@ impl<'a> Expression<'a> {
             Expression::StringLiteral(s) => format!("\"{}\"", s),
             Expression::NumberLiteral(n) => format!("{}", n),
             Expression::BooleanLiteral(b) => format!("{}", b),
-            Expression::Identifier(VarName(s)) => format!("{}", s),
+            Expression::Identifier(Variable(s)) => format!("{}", s),
             Expression::Unary { operator, right } => {
                 format!("({:?} {})", operator, right.pretty_print())
             }
@@ -113,7 +116,7 @@ impl<'a> Expression<'a> {
                     right.pretty_print(),
                 )
             }
-            Expression::Assignment(VarName(s), e) => format!("(SET {} {})", s, e.pretty_print()),
+            Expression::Assignment(Variable(s), e) => format!("(SET {} {})", s, e.pretty_print()),
             Expression::FunctionCall(e, args) => {
                 format!(
                     "(CALL {} {})",
