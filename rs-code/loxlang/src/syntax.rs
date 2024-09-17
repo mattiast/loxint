@@ -1,15 +1,15 @@
 #[derive(Debug, Clone)]
-pub enum Statement<'a> {
-    Expression(Expression<'a>),
-    Print(Expression<'a>),
-    Block(Vec<Declaration<'a>>),
+pub enum Statement<'a, VR, VD> {
+    Expression(Expression<'a, VR>),
+    Print(Expression<'a, VR>),
+    Block(Vec<Declaration<'a, VR, VD>>),
     If(
-        Expression<'a>,
-        Box<Statement<'a>>,
-        Option<Box<Statement<'a>>>,
+        Expression<'a, VR>,
+        Box<Statement<'a, VR, VD>>,
+        Option<Box<Statement<'a, VR, VD>>>,
     ),
-    While(Expression<'a>, Box<Statement<'a>>),
-    For(ForLoopDef<'a>, Box<Statement<'a>>),
+    While(Expression<'a, VR>, Box<Statement<'a, VR, VD>>),
+    For(ForLoopDef<'a, VR, VD>, Box<Statement<'a, VR, VD>>),
     // Return(Expression<'a>),
 }
 /// Combination of `var_name` and `start` has 4 cases:
@@ -18,11 +18,11 @@ pub enum Statement<'a> {
 /// 3. var_name is None and start is Some: this is `x = 0;` case where an existing variable is used, and the expression is typically an assignment
 /// 4. Both are none: here the first part is empty `for(;...)`, initialization is done outside the loop
 #[derive(Debug, Clone)]
-pub struct ForLoopDef<'a> {
-    pub var_name: Option<VarName<'a>>,
-    pub start: Option<Expression<'a>>,
-    pub cond: Option<Expression<'a>>,
-    pub increment: Option<Expression<'a>>,
+pub struct ForLoopDef<'a, VR, VD> {
+    pub var_name: Option<VariableDecl<VD>>,
+    pub start: Option<Expression<'a, VR>>,
+    pub cond: Option<Expression<'a, VR>>,
+    pub increment: Option<Expression<'a, VR>>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -30,40 +30,45 @@ pub struct Variable<Var>(pub Var);
 
 pub type VarName<'a> = Variable<&'a str>;
 // TODO Add a type parameter and field for annotation data (name resolution)
+pub type VarId = u64;
+pub type VResolution = (VarId, usize);
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct VariableDecl<Var>(pub Var);
 
 #[derive(Debug, Clone)]
-pub enum Declaration<'a> {
-    Var(VarName<'a>, Option<Expression<'a>>),
+pub enum Declaration<'a, VR, VD> {
+    Var(VariableDecl<VD>, Option<Expression<'a, VR>>),
     Function {
-        name: VarName<'a>,
-        args: Vec<VarName<'a>>,
-        body: Statement<'a>,
+        name: VariableDecl<VD>,
+        args: Vec<VariableDecl<VD>>,
+        body: Statement<'a, VR, VD>,
     },
-    Statement(Statement<'a>),
+    Statement(Statement<'a, VR, VD>),
 }
 
-pub struct Program<'a> {
-    pub decls: Vec<Declaration<'a>>,
+pub struct Program<'a, VR, VD> {
+    pub decls: Vec<Declaration<'a, VR, VD>>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression<'a> {
+pub enum Expression<'a, Var> {
     Nil,
     StringLiteral(&'a str),
     NumberLiteral(f64),
     BooleanLiteral(bool),
-    Identifier(VarName<'a>),
+    Identifier(Variable<Var>),
     Unary {
         operator: UOperator,
-        right: Box<Expression<'a>>,
+        right: Box<Expression<'a, Var>>,
     },
     Binary {
-        left: Box<Expression<'a>>,
+        left: Box<Expression<'a, Var>>,
         operator: BOperator,
-        right: Box<Expression<'a>>,
+        right: Box<Expression<'a, Var>>,
     },
-    Assignment(VarName<'a>, Box<Expression<'a>>),
-    FunctionCall(Box<Expression<'a>>, Vec<Expression<'a>>),
+    Assignment(Variable<Var>, Box<Expression<'a, Var>>),
+    FunctionCall(Box<Expression<'a, Var>>, Vec<Expression<'a, Var>>),
     // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
     // TODO Should there be some link to where this was defined in the source?
     // Generic annotation for each node?
@@ -93,7 +98,7 @@ pub enum BOperator {
     GreaterEqual,
 }
 
-impl<'a> Expression<'a> {
+impl<'a> Expression<'a, &'a str> {
     pub fn pretty_print(&self) -> String {
         match self {
             Expression::Nil => "nil".to_string(),

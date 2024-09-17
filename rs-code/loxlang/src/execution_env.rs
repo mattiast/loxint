@@ -1,4 +1,4 @@
-use crate::syntax::{Statement, VarName, Variable};
+use crate::syntax::{Statement, VResolution, VarId, VariableDecl};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -21,8 +21,8 @@ pub enum Value<'src> {
 }
 #[derive(Clone)]
 pub struct LoxFunction<'src> {
-    pub arguments: Vec<VarName<'src>>,
-    pub body: Statement<'src>,
+    pub arguments: Vec<VariableDecl<VarId>>,
+    pub body: Statement<'src, VResolution, VarId>,
     pub env: Stack<'src>,
 }
 impl Debug for LoxFunction<'_> {
@@ -44,7 +44,7 @@ pub enum NativeFunc {
 }
 
 struct StackFrame<'a> {
-    values: HashMap<VarName<'a>, Value<'a>>,
+    values: HashMap<VarId, Value<'a>>,
 }
 pub struct NotFound;
 
@@ -54,13 +54,13 @@ impl<'a> StackFrame<'a> {
             values: HashMap::new(),
         }
     }
-    pub fn lookup(&self, name: &VarName<'a>) -> Option<Value<'a>> {
-        self.values.get(name).cloned()
+    pub fn lookup(&self, name: &VarId) -> Option<Value<'a>> {
+        self.values.get(&name).cloned()
     }
-    pub fn is_defined(&self, name: &VarName<'a>) -> bool {
+    pub fn is_defined(&self, name: &VarId) -> bool {
         self.values.contains_key(name)
     }
-    pub fn set(&mut self, name: VarName<'a>, value: Value<'a>) {
+    pub fn set(&mut self, name: VarId, value: Value<'a>) {
         self.values.insert(name, value);
     }
 }
@@ -79,7 +79,8 @@ struct Node<'src> {
 impl<'src> Stack<'src> {
     pub fn new() -> Self {
         let mut global_env = StackFrame::new();
-        global_env.set(Variable("clock"), Value::NativeFunction(NativeFunc::Clock));
+        // TODO How to handle builtin functions?
+        global_env.set(1, Value::NativeFunction(NativeFunc::Clock));
 
         let node = Node {
             env: Mutex::new(global_env),
@@ -104,37 +105,26 @@ impl<'src> Stack<'src> {
         // No huh huh
         self.head = self.head.as_ref().parent.clone().unwrap();
     }
-    pub fn lookup(&self, name: &VarName<'src>) -> Option<Value<'src>> {
+    pub fn lookup(&self, name: VResolution) -> Option<Value<'src>> {
         let mut node = self.head.as_ref();
-        loop {
-            if let Some(x) = node.env.lock().unwrap().lookup(name) {
-                return Some(x);
-            }
-            if let Some(parent) = node.parent.as_ref() {
-                node = parent.as_ref();
-            } else {
-                return None;
-            }
+        let (var_id, depth) = name;
+        for _ in 0..depth {
+            node = node.parent.as_ref()?;
         }
+        node.env.lock().unwrap().lookup(&var_id)
     }
-    pub fn assign(&self, name: VarName<'src>, value: Value<'src>) -> Result<(), NotFound> {
+    pub fn assign(&self, name: VResolution, value: Value<'src>) -> Result<(), NotFound> {
         let mut node = self.head.as_ref();
-        loop {
-            let mut g = node.env.lock().unwrap();
-            if g.is_defined(&name) {
-                g.set(name, value);
-                return Ok(());
-            }
-            drop(g);
-            if let Some(parent) = node.parent.as_ref() {
-                node = parent.as_ref();
-            } else {
-                return Err(NotFound);
-            }
+        let (var_id, depth) = name;
+        for _ in 0..depth {
+            node = node.parent.as_ref().ok_or(NotFound)?;
         }
+        let mut g = node.env.lock().unwrap();
+        g.set(var_id, value);
+        Ok(())
     }
-    pub fn declare(&mut self, name: VarName<'src>, value: Value<'src>) {
-        self.get_env().lock().unwrap().set(name, value);
+    pub fn declare(&mut self, var_id: VarId, value: Value<'src>) {
+        self.get_env().lock().unwrap().set(var_id, value);
     }
 }
 
@@ -185,13 +175,13 @@ impl<'src, Dep: Deps> ExecEnv<'src, Dep> {
     pub fn clock(&mut self) -> f64 {
         self.deps.clock()
     }
-    pub fn lookup(&self, name: &VarName<'src>) -> Option<Value<'src>> {
+    pub fn lookup(&self, name: VResolution) -> Option<Value<'src>> {
         self.stack.lookup(name)
     }
-    pub fn assign(&mut self, name: VarName<'src>, value: Value<'src>) -> Result<(), NotFound> {
+    pub fn assign(&mut self, name: VResolution, value: Value<'src>) -> Result<(), NotFound> {
         self.stack.assign(name, value)
     }
-    pub fn declare(&mut self, name: VarName<'src>, value: Value<'src>) {
+    pub fn declare(&mut self, name: VarId, value: Value<'src>) {
         self.stack.declare(name, value)
     }
     pub fn run_in_substack<F, U>(&mut self, f: F) -> U

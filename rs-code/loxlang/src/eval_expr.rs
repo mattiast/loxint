@@ -2,14 +2,17 @@ use std::mem;
 
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
-use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
+use crate::syntax::{
+    BOperator, Declaration, Expression, Statement, UOperator, VResolution, VarId, Variable,
+    VariableDecl,
+};
 
 type EvalError = ();
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
 pub fn eval<'src, Dep: Deps>(
-    e: &Expression<'src>,
+    e: &Expression<'src, VResolution>,
     stack: &mut ExecEnv<'src, Dep>,
 ) -> Result<Value<'src>, EvalError> {
     match e {
@@ -17,7 +20,7 @@ pub fn eval<'src, Dep: Deps>(
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
         Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
         Expression::Nil => Ok(Value::Nil),
-        Expression::Identifier(var) => match stack.lookup(var) {
+        Expression::Identifier(Variable(var)) => match stack.lookup(*var) {
             Some(v) => Ok(v),
             None => Err(()),
         },
@@ -91,9 +94,9 @@ pub fn eval<'src, Dep: Deps>(
                 }
             }
         }
-        Expression::Assignment(name, value) => {
+        Expression::Assignment(Variable(name), value) => {
             let val = eval(value, stack)?;
-            match stack.assign(name.clone(), val.clone()) {
+            match stack.assign(*name, val.clone()) {
                 Ok(()) => Ok(val),
                 Err(NotFound) => Err(()),
             }
@@ -115,8 +118,10 @@ pub fn eval<'src, Dep: Deps>(
                     let old_stack = mem::replace(&mut stack.stack, f.env.clone());
 
                     let result = stack.run_in_substack(|stack| {
-                        for (arg_name, arg_value) in f.arguments.iter().zip(args.into_iter()) {
-                            stack.declare(arg_name.clone(), arg_value);
+                        for (VariableDecl(arg_name), arg_value) in
+                            f.arguments.iter().zip(args.into_iter())
+                        {
+                            stack.declare(*arg_name, arg_value);
                         }
                         run_statement(&f.body, stack)?;
                         // TODO return values
@@ -140,7 +145,7 @@ pub fn eval<'src, Dep: Deps>(
 }
 
 pub fn run_statement<'src, Dep: Deps>(
-    s: &Statement<'src>,
+    s: &Statement<'src, VResolution, VarId>,
     env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {
@@ -230,13 +235,13 @@ pub fn run_statement<'src, Dep: Deps>(
 }
 
 pub fn run_declaration<'src, Dep: Deps>(
-    s: &Declaration<'src>,
+    s: &Declaration<'src, VResolution, VarId>,
     env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {
-        Declaration::Var(s, e) => {
+        Declaration::Var(VariableDecl(s), e) => {
             let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env)?;
-            env.declare(s.clone(), v);
+            env.declare(*s, v);
             Ok(())
         }
         Declaration::Statement(stmt) => run_statement(stmt, env),
@@ -246,7 +251,7 @@ pub fn run_declaration<'src, Dep: Deps>(
                 body: body.clone(),
                 env: env.stack.clone(),
             };
-            env.declare(name.clone(), Value::Function(func));
+            env.declare(name.0, Value::Function(func));
             Ok(())
         }
     }

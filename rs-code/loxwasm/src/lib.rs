@@ -1,6 +1,8 @@
 use loxlang::execution_env::Deps;
 use loxlang::execution_env::Value;
 use loxlang::parser;
+use loxlang::resolution::resolve;
+use loxlang::resolution::resolve_expr_no_var;
 use loxlang::scanner;
 use wasm_bindgen::prelude::wasm_bindgen;
 use wasm_bindgen::JsValue;
@@ -25,6 +27,7 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
     let e = p
         .parse_expr()
         .map_err(|e| LoxError(format!("Failed to parse expression: {:?}", e)))?;
+    let e = resolve_expr_no_var(e).unwrap();
     if !p.done() {
         return Err(LoxError("Unparsed tokens remaining".to_string()));
     }
@@ -52,6 +55,7 @@ pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
     let program = p
         .parse_program()
         .map_err(|e| LoxError(format!("Failed to parse program: {:?}", e)))?;
+    let program = resolve(program).unwrap();
     if !p.done() {
         return Err(LoxError("Unparsed tokens remaining".to_string()));
     }
