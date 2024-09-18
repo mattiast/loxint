@@ -6,6 +6,7 @@ use nom::{
     sequence::tuple,
     IResult,
 };
+use thiserror::Error;
 
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
@@ -147,16 +148,30 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
     ))(input)
 }
 
-pub fn parse_tokens(input: &str) -> IResult<&str, Vec<Token>> {
+#[derive(Error, Debug)]
+#[error("Lexical error")]
+pub struct LexicalError {
+    pub location: usize,
+}
+pub fn parse_tokens(input: &str) -> Result<Vec<Token>, LexicalError> {
     // TODO change the error type to something that makes sense
     let mut tokens = Vec::new();
+    let start = input;
     let mut input = input.trim_start();
     while !input.is_empty() {
-        let (remaining, token) = parse_token(input)?;
-        tokens.push(token);
-        input = remaining.trim_start();
+        let result = parse_token(input);
+        match result {
+            Ok((remaining, token)) => {
+                tokens.push(token);
+                input = remaining.trim_start();
+            }
+            Err(_) => {
+                let location = (input.as_ptr() as usize) - (start.as_ptr() as usize);
+                return Err(LexicalError { location });
+            }
+        }
     }
-    Ok((input, tokens))
+    Ok(tokens)
 }
 
 // tests
@@ -203,16 +218,19 @@ mod tests {
     #[test]
     fn test_multiple_tokens() {
         let input = "123.456 \"hello\"+3";
-        let expected = Ok((
-            "",
-            vec![
-                Token::NumberLiteral(123.456),
-                Token::StringLiteral("hello"),
-                Token::Symbol(Symbol::PLUS),
-                Token::NumberLiteral(3.),
-            ],
-        ));
-        let actual = parse_tokens(input);
+        let expected = vec![
+            Token::NumberLiteral(123.456),
+            Token::StringLiteral("hello"),
+            Token::Symbol(Symbol::PLUS),
+            Token::NumberLiteral(3.),
+        ];
+        let actual = parse_tokens(input).unwrap();
         assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_error() {
+        let input = "123.456 \"hello+3";
+        let actual = parse_tokens(input).unwrap_err();
+        assert_eq!(actual.location, 8);
     }
 }

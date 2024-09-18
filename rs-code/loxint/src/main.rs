@@ -11,8 +11,7 @@ fn main() {
             // read a file into a string and parse a program
             let source = std::fs::read_to_string(&file).unwrap();
             // parse a program from source
-            let (rest, tokens) = parse_tokens(&source).unwrap();
-            assert_eq!(rest, "");
+            let tokens = parse_tokens(&source).unwrap();
             let mut parser = parser::Parser::new(&tokens);
             let program = parser.parse_program().unwrap();
             let program = loxlang::resolution::resolve(program).unwrap();
@@ -27,10 +26,7 @@ fn main() {
             // Read a line from stdin
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap();
-            let (rest, tokens) = parse_tokens(&input).unwrap();
-            if rest != "" {
-                eprintln!("Unparsed input: {}", rest);
-            }
+            let tokens = parse_tokens(&input).unwrap();
             let mut p = parser::Parser::new(&tokens);
             let e = p.parse_expr().unwrap();
             let e = resolve_expr_no_var(e).unwrap();

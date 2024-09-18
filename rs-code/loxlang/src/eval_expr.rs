@@ -283,8 +283,7 @@ mod tests {
             time: 0.0,
         };
         let mut env = ExecEnv::new(deps);
-        let (rest, tokens) = parse_tokens(source).unwrap();
-        assert_eq!(rest, "");
+        let tokens = parse_tokens(source).unwrap();
         let mut parser = parser::Parser::new(&tokens);
         let program = parser.parse_program().unwrap();
         let program = crate::resolution::resolve(program).unwrap();

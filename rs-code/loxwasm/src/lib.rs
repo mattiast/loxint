@@ -18,11 +18,8 @@ impl From<LoxError> for JsValue {
 
 #[wasm_bindgen]
 pub fn eval_expr(src: String) -> Result<f64, LoxError> {
-    let (rest, tokens) = scanner::parse_tokens(&src)
+    let tokens = scanner::parse_tokens(&src)
         .map_err(|e| LoxError(format!("Failed to parse tokens: {}", e)))?;
-    if rest != "" {
-        return Err(LoxError("Unparsed input remaining".to_string()));
-    }
     let mut p = parser::Parser::new(&tokens);
     let e = p
         .parse_expr()
@@ -46,11 +43,8 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
 
 #[wasm_bindgen]
 pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
-    let (rest, tokens) = scanner::parse_tokens(&src)
+    let tokens = scanner::parse_tokens(&src)
         .map_err(|e| LoxError(format!("Failed to parse tokens: {}", e)))?;
-    if rest != "" {
-        return Err(LoxError("Unparsed input remaining".to_string()));
-    }
     let mut p = parser::Parser::new(&tokens);
     let program = p
         .parse_program()
