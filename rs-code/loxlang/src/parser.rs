@@ -1,8 +1,8 @@
 use crate::{
     scanner::{Reserved, Symbol, Token},
     syntax::{
-        BOperator, Declaration, Expression, ForLoopDef, Program, Statement, UOperator, VarName,
-        Variable, VariableDecl,
+        BOperator, Declaration, Expression, ForLoopDef, Program, Statement, UOperator, Variable,
+        VariableDecl,
     },
 };
 
@@ -409,7 +409,7 @@ where
         match self.remaining.first() {
             Some(Token::Identifier(s)) => {
                 self.remaining = &self.remaining[1..];
-                Ok((s))
+                Ok(s)
             }
             _ => Err(ParseError::Bad),
         }
