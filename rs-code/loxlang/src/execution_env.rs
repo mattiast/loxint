@@ -55,10 +55,7 @@ impl<'a> StackFrame<'a> {
         }
     }
     pub fn lookup(&self, name: &VarId) -> Option<Value<'a>> {
-        self.values.get(&name).cloned()
-    }
-    pub fn is_defined(&self, name: &VarId) -> bool {
-        self.values.contains_key(name)
+        self.values.get(name).cloned()
     }
     pub fn set(&mut self, name: VarId, value: Value<'a>) {
         self.values.insert(name, value);

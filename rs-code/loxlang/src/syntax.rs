@@ -28,7 +28,6 @@ pub struct ForLoopDef<'a, VR, VD> {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Variable<Var>(pub Var);
 
-pub type VarName<'a> = Variable<&'a str>;
 // TODO Add a type parameter and field for annotation data (name resolution)
 pub type VarId = u64;
 pub type VResolution = (VarId, usize);
@@ -47,6 +46,7 @@ pub enum Declaration<'a, VR, VD> {
     Statement(Statement<'a, VR, VD>),
 }
 
+#[derive(Debug, Clone)]
 pub struct Program<'a, VR, VD> {
     pub decls: Vec<Declaration<'a, VR, VD>>,
 }

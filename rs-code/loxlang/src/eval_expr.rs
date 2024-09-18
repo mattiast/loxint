@@ -192,19 +192,16 @@ pub fn run_statement<'src, Dep: Deps>(
         },
         Statement::For(loopdef, body) => {
             // We need to create a new stack frame for the loop, where the declaration is executed
+            let start = loopdef
+                .start
+                .as_ref()
+                .map(|e| eval(e, env))
+                .transpose()?
+                .unwrap_or(Value::Nil);
             env.run_in_substack(|env| {
-                match loopdef.var_name {
-                    Some(ref var_name) => {
-                        let decl = Declaration::Var(var_name.clone(), loopdef.start.clone());
-                        run_declaration(&decl, env)
-                    }
-                    None => {
-                        if let Some(ref start) = loopdef.start {
-                            eval(start, env)?;
-                        }
-                        Ok(())
-                    }
-                }?;
+                if let Some(VariableDecl(var_name)) = loopdef.var_name {
+                    env.declare(var_name, start);
+                }
                 loop {
                     // Evaluate the condition
                     let cond_val = if let Some(ref cond) = loopdef.cond {
@@ -290,6 +287,7 @@ mod tests {
         assert_eq!(rest, "");
         let mut parser = parser::Parser::new(&tokens);
         let program = parser.parse_program().unwrap();
+        let program = crate::resolution::resolve(program).unwrap();
         for stmt in program.decls {
             run_declaration(&stmt, &mut env).unwrap();
         }
@@ -358,8 +356,6 @@ mod tests {
             }
         "#;
         let output = get_output(source);
-        // TODO this should be 1,1 but it is 1,2
-        // Resolution needs to be fixed
-        assert_eq!(output, vec!["Number(1.0)", "Number(2.0)"]);
+        assert_eq!(output, vec!["Number(1.0)", "Number(1.0)"]);
     }
 }
