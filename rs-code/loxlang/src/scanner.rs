@@ -158,7 +158,6 @@ pub struct LexicalError {
     pub source_offset: SourceOffset,
 }
 pub fn parse_tokens(input: &str) -> Result<Vec<Token>, LexicalError> {
-    // TODO change the error type to something that makes sense
     let mut tokens = Vec::new();
     let start = input;
     let mut input = input.trim_start();
