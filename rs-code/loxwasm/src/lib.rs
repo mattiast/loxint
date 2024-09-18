@@ -20,7 +20,7 @@ impl From<LoxError> for JsValue {
 pub fn eval_expr(src: String) -> Result<f64, LoxError> {
     let tokens = scanner::parse_tokens(&src)
         .map_err(|e| LoxError(format!("Failed to parse tokens: {}", e)))?;
-    let mut p = parser::Parser::new(&tokens);
+    let mut p = parser::Parser::new(&src, &tokens);
     let e = p
         .parse_expr()
         .map_err(|e| LoxError(format!("Failed to parse expression: {:?}", e)))?;
@@ -45,7 +45,7 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
 pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
     let tokens = scanner::parse_tokens(&src)
         .map_err(|e| LoxError(format!("Failed to parse tokens: {}", e)))?;
-    let mut p = parser::Parser::new(&tokens);
+    let mut p = parser::Parser::new(&src, &tokens);
     let program = p
         .parse_program()
         .map_err(|e| LoxError(format!("Failed to parse program: {:?}", e)))?;

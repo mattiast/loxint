@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use miette::{Diagnostic, SourceOffset};
 use nom::{
     branch::alt,
@@ -157,7 +159,7 @@ pub struct LexicalError {
     #[label("No valid token here")]
     pub source_offset: SourceOffset,
 }
-pub fn parse_tokens(input: &str) -> Result<Vec<Token>, LexicalError> {
+pub fn parse_tokens(input: &str) -> Result<Vec<(Token, Range<usize>)>, LexicalError> {
     let mut tokens = Vec::new();
     let start = input;
     let mut input = input.trim_start();
@@ -165,7 +167,11 @@ pub fn parse_tokens(input: &str) -> Result<Vec<Token>, LexicalError> {
         let result = parse_token(input);
         match result {
             Ok((remaining, token)) => {
-                tokens.push(token);
+                let range = Range {
+                    start: (input.as_ptr() as usize) - (start.as_ptr() as usize),
+                    end: (remaining.as_ptr() as usize) - (start.as_ptr() as usize),
+                };
+                tokens.push((token, range));
                 input = remaining.trim_start();
             }
             Err(_) => {
@@ -230,7 +236,11 @@ mod tests {
             Token::Symbol(Symbol::PLUS),
             Token::NumberLiteral(3.),
         ];
-        let actual = parse_tokens(input).unwrap();
+        let actual = parse_tokens(input)
+            .unwrap()
+            .into_iter()
+            .map(|x| x.0)
+            .collect::<Vec<_>>();
         assert_eq!(actual, expected);
     }
     #[test]
