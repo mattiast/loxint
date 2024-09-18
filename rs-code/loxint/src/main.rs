@@ -1,17 +1,18 @@
 use loxlang::parser;
 use loxlang::scanner::parse_tokens;
 use loxlang::{eval_expr::run_declaration, resolution::resolve_expr_no_var};
+use miette::Result;
 use std::io::Write;
 use std::path::PathBuf;
 
-fn main() {
+fn main() -> Result<()> {
     let args = Cli::parse();
     match args.command {
         Commands::Run { file } => {
             // read a file into a string and parse a program
             let source = std::fs::read_to_string(&file).unwrap();
             // parse a program from source
-            let tokens = parse_tokens(&source).unwrap();
+            let tokens = parse_tokens(&source)?;
             let mut parser = parser::Parser::new(&tokens);
             let program = parser.parse_program().unwrap();
             let program = loxlang::resolution::resolve(program).unwrap();
@@ -19,6 +20,7 @@ fn main() {
             for stmt in program.decls {
                 run_declaration(&stmt, &mut env).unwrap();
             }
+            Ok(())
         }
         Commands::Repl => {
             print!("> ");
@@ -36,6 +38,7 @@ fn main() {
             println!("{:?}", e);
             let mut env = loxlang::execution_env::ExecEnv::new_default();
             println!("{:?}", loxlang::eval_expr::eval(&e, &mut env));
+            Ok(())
         }
     }
 }

@@ -1,3 +1,4 @@
+use miette::{Diagnostic, SourceOffset};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
@@ -148,10 +149,13 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
     ))(input)
 }
 
-#[derive(Error, Debug)]
-#[error("Lexical error")]
+#[derive(Error, Debug, Diagnostic)]
+#[error("lexical_error")]
 pub struct LexicalError {
-    pub location: usize,
+    #[source_code]
+    pub src: String,
+    #[label("No valid token here")]
+    pub source_offset: SourceOffset,
 }
 pub fn parse_tokens(input: &str) -> Result<Vec<Token>, LexicalError> {
     // TODO change the error type to something that makes sense
@@ -167,7 +171,10 @@ pub fn parse_tokens(input: &str) -> Result<Vec<Token>, LexicalError> {
             }
             Err(_) => {
                 let location = (input.as_ptr() as usize) - (start.as_ptr() as usize);
-                return Err(LexicalError { location });
+                return Err(LexicalError {
+                    src: start.to_owned(),
+                    source_offset: location.into(),
+                });
             }
         }
     }
@@ -231,6 +238,6 @@ mod tests {
     fn test_error() {
         let input = "123.456 \"hello+3";
         let actual = parse_tokens(input).unwrap_err();
-        assert_eq!(actual.location, 8);
+        assert_eq!(actual.source_offset.offset(), 8);
     }
 }
