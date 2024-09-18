@@ -24,7 +24,7 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
     let e = p
         .parse_expr()
         .map_err(|e| LoxError(format!("Failed to parse expression: {:?}", e)))?;
-    let e = resolve_expr_no_var(e).unwrap();
+    let e = resolve_expr_no_var(e, &src).unwrap();
     if !p.done() {
         return Err(LoxError("Unparsed tokens remaining".to_string()));
     }
@@ -49,7 +49,7 @@ pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
     let program = p
         .parse_program()
         .map_err(|e| LoxError(format!("Failed to parse program: {:?}", e)))?;
-    let program = resolve(program).unwrap();
+    let program = resolve(program, &src).unwrap();
     if !p.done() {
         return Err(LoxError("Unparsed tokens remaining".to_string()));
     }

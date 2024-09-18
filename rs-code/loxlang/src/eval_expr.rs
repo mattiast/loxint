@@ -286,7 +286,7 @@ mod tests {
         let tokens = parse_tokens(source).unwrap();
         let mut parser = parser::Parser::new(source, &tokens);
         let program = parser.parse_program().unwrap();
-        let program = crate::resolution::resolve(program).unwrap();
+        let program = crate::resolution::resolve(program, source).unwrap();
         for stmt in program.decls {
             run_declaration(&stmt, &mut env).unwrap();
         }

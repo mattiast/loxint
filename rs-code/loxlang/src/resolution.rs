@@ -1,25 +1,43 @@
 use std::collections::HashMap;
 
+use miette::{Diagnostic, SourceSpan};
+use thiserror::Error;
+
 use crate::syntax::{
     Declaration, Expression, ForLoopDef, Program, Statement, VResolution, VarId, Variable,
     VariableDecl,
 };
 
+#[derive(Error, Debug, Diagnostic)]
+#[error("resolution error")]
+pub struct ResolutionError {
+    #[source_code]
+    src: String,
+    #[label("Unknown variable")]
+    span: SourceSpan,
+    #[help]
+    help: String,
+}
+
 pub fn resolve<'src>(
     x: Program<'src, &'src str, &'src str>,
-) -> Result<Program<'src, VResolution, VarId>, ()> {
+    src: &'src str,
+) -> Result<Program<'src, VResolution, VarId>, ResolutionError> {
     let mut resolver = Resolver {
         scopes: vec![HashMap::from([("clock", 1)])],
         next_id: 2,
+        src,
     };
     return resolver.resolve_program(x);
 }
 pub fn resolve_expr_no_var<'src>(
     x: Expression<'src, &'src str>,
-) -> Result<Expression<'src, VResolution>, ()> {
+    src: &'src str,
+) -> Result<Expression<'src, VResolution>, ResolutionError> {
     let resolver = Resolver {
         scopes: vec![],
         next_id: 0,
+        src,
     };
     return resolver.resolve_expr(x);
 }
@@ -28,6 +46,7 @@ struct Resolver<'src> {
     // TODO how about `clock`, it needs some default mapping or such
     scopes: Vec<HashMap<&'src str, VarId>>,
     next_id: VarId,
+    src: &'src str,
 }
 
 impl<'src> Resolver<'src> {
@@ -38,10 +57,19 @@ impl<'src> Resolver<'src> {
             .enumerate()
             .find_map(|(depth, scope)| scope.get(name).map(|id| (*id, depth)))
     }
+    fn error(&self, name: &'src str) -> ResolutionError {
+        let span_start = (name.as_ptr() as usize) - (self.src.as_ptr() as usize);
+        ResolutionError {
+            src: self.src.to_owned(),
+            help: format!("variable '{}' not found", name),
+            span: (span_start, name.len()).into(),
+        }
+    }
     fn declare_variable(
         &mut self,
         VariableDecl(name): VariableDecl<&'src str>,
     ) -> VariableDecl<VarId> {
+        // If we want to deny shadowing, it would be checked here
         let id = self.next_id;
         self.next_id += 1;
         self.scopes.last_mut().unwrap().insert(name, id);
@@ -50,7 +78,7 @@ impl<'src> Resolver<'src> {
     fn resolve_expr(
         &self,
         x: Expression<'src, &'src str>,
-    ) -> Result<Expression<'src, VResolution>, ()> {
+    ) -> Result<Expression<'src, VResolution>, ResolutionError> {
         match x {
             Expression::Nil => Ok(Expression::Nil),
             Expression::StringLiteral(s) => Ok(Expression::StringLiteral(s)),
@@ -76,12 +104,12 @@ impl<'src> Resolver<'src> {
                     .collect::<Result<Vec<_>, _>>()?,
             )),
             Expression::Assignment(Variable(v), e) => {
-                let r = self.find_variable(v).ok_or(())?;
+                let r = self.find_variable(v).ok_or_else(|| self.error(v))?;
                 let e = self.resolve_expr(*e)?;
                 Ok(Expression::Assignment(Variable(r), Box::new(e)))
             }
             Expression::Identifier(Variable(v)) => {
-                let r = self.find_variable(v).ok_or(())?;
+                let r = self.find_variable(v).ok_or_else(|| self.error(v))?;
                 Ok(Expression::Identifier(Variable(r)))
             }
         }
@@ -89,7 +117,7 @@ impl<'src> Resolver<'src> {
     fn resolve_statement(
         &mut self,
         x: Statement<'src, &'src str, &'src str>,
-    ) -> Result<Statement<'src, VResolution, VarId>, ()> {
+    ) -> Result<Statement<'src, VResolution, VarId>, ResolutionError> {
         match x {
             Statement::Expression(e) => self.resolve_expr(e).map(Statement::Expression),
             Statement::Print(e) => self.resolve_expr(e).map(Statement::Print),
@@ -146,7 +174,7 @@ impl<'src> Resolver<'src> {
     fn resolve_declaration(
         &mut self,
         x: Declaration<'src, &'src str, &'src str>,
-    ) -> Result<Declaration<'src, VResolution, VarId>, ()> {
+    ) -> Result<Declaration<'src, VResolution, VarId>, ResolutionError> {
         match x {
             Declaration::Var(v, e) => {
                 // First resolve the expression in the scope without the new variable
@@ -168,7 +196,7 @@ impl<'src> Resolver<'src> {
     fn resolve_program(
         &mut self,
         x: Program<'src, &'src str, &'src str>,
-    ) -> Result<Program<'src, VResolution, VarId>, ()> {
+    ) -> Result<Program<'src, VResolution, VarId>, ResolutionError> {
         Ok(Program {
             decls: x
                 .decls

@@ -15,7 +15,7 @@ fn main() -> Result<()> {
             let tokens = parse_tokens(&source)?;
             let mut parser = parser::Parser::new(&source, &tokens);
             let program = parser.parse_program()?;
-            let program = loxlang::resolution::resolve(program).unwrap();
+            let program = loxlang::resolution::resolve(program, &source)?;
             let mut env = loxlang::execution_env::ExecEnv::new_default();
             for stmt in program.decls {
                 run_declaration(&stmt, &mut env).unwrap();
@@ -31,7 +31,7 @@ fn main() -> Result<()> {
             let tokens = parse_tokens(&input).unwrap();
             let mut p = parser::Parser::new(&input, &tokens);
             let e = p.parse_expr()?;
-            let e = resolve_expr_no_var(e).unwrap();
+            let e = resolve_expr_no_var(e, &input).unwrap();
             if !p.done() {
                 eprintln!("Unparsed tokens");
             }
