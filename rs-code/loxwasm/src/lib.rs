@@ -45,14 +45,10 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
 pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
     let tokens = scanner::parse_tokens(&src)
         .map_err(|e| LoxError(format!("Failed to parse tokens: {}", e)))?;
-    let mut p = parser::Parser::new(&src, &tokens);
-    let program = p
+    let program = parser::Parser::new(&src, &tokens)
         .parse_program()
         .map_err(|e| LoxError(format!("Failed to parse program: {:?}", e)))?;
     let program = resolve(program, &src).unwrap();
-    if !p.done() {
-        return Err(LoxError("Unparsed tokens remaining".to_string()));
-    }
     let deps = TestDeps {
         printed: Vec::new(),
     };

@@ -13,8 +13,7 @@ fn main() -> Result<()> {
             let source = std::fs::read_to_string(&file).unwrap();
             // parse a program from source
             let tokens = parse_tokens(&source)?;
-            let mut parser = parser::Parser::new(&source, &tokens);
-            let program = parser.parse_program()?;
+            let program = parser::Parser::new(&source, &tokens).parse_program()?;
             let program = loxlang::resolution::resolve(program, &source)?;
             let mut env = loxlang::execution_env::ExecEnv::new_default();
             for stmt in program.decls {

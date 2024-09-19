@@ -150,7 +150,7 @@ where
             increment,
         })
     }
-    pub fn parse_program(&mut self) -> Result<Program<'src, &'src str, &'src str>, ParseError> {
+    pub fn parse_program(mut self) -> Result<Program<'src, &'src str, &'src str>, ParseError> {
         let mut decls = Vec::new();
         while !self.done() {
             decls.push(self.parse_declaration()?);
