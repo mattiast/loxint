@@ -2,9 +2,9 @@ use std::mem;
 
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
+use crate::resolution::{ResolvedDeclaration, ResolvedExpression, ResolvedStatement};
 use crate::syntax::{
-    BOperator, Declaration, Expression, Statement, UOperator, VResolution, VarId, Variable,
-    VariableDecl,
+    BOperator, Declaration, Expression, Statement, UOperator, Variable, VariableDecl,
 };
 
 type EvalError = ();
@@ -12,7 +12,7 @@ type EvalError = ();
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
 pub fn eval<'src, Dep: Deps>(
-    e: &Expression<'src, VResolution>,
+    e: &ResolvedExpression<'src>,
     stack: &mut ExecEnv<'src, Dep>,
 ) -> Result<Value<'src>, EvalError> {
     match e {
@@ -145,7 +145,7 @@ pub fn eval<'src, Dep: Deps>(
 }
 
 pub fn run_statement<'src, Dep: Deps>(
-    s: &Statement<'src, VResolution, VarId>,
+    s: &ResolvedStatement<'src>,
     env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {
@@ -232,7 +232,7 @@ pub fn run_statement<'src, Dep: Deps>(
 }
 
 pub fn run_declaration<'src, Dep: Deps>(
-    s: &Declaration<'src, VResolution, VarId>,
+    s: &ResolvedDeclaration<'src>,
     env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {

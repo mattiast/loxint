@@ -33,9 +33,10 @@ pub enum ParseError {
     },
 }
 
+pub type ParsedExpression<'src> = Expression<'src, &'src str>;
 pub type ParsedStatement<'src> = Statement<'src, &'src str, &'src str>;
 pub type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str>;
-pub type ParsedExpression<'src> = Expression<'src, &'src str>;
+pub type ParsedProgram<'src> = Program<'src, &'src str, &'src str>;
 
 pub struct Parser<'list, 'src> {
     remaining: &'list [(Token<'src>, Range<usize>)],

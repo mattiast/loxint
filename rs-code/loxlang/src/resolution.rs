@@ -3,11 +3,20 @@ use std::collections::HashMap;
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-use crate::syntax::{
-    Declaration, Expression, ForLoopDef, Program, Statement, VResolution, VarId, Variable,
-    VariableDecl,
+use crate::{
+    parser::{ParsedExpression, ParsedProgram},
+    syntax::{
+        Declaration, Expression, ForLoopDef, Program, Statement, VResolution, VarId, Variable,
+        VariableDecl,
+    },
 };
 
+pub type ResolvedExpression<'src> = Expression<'src, VResolution>;
+pub type ResolvedStatement<'src> = Statement<'src, VResolution, VarId>;
+pub type ResolvedDeclaration<'src> = Declaration<'src, VResolution, VarId>;
+pub type ResolvedProgram<'src> = Program<'src, VResolution, VarId>;
+
+// TODO use `miette::Error::with_source_code` instead of passing the source here
 #[derive(Error, Debug, Diagnostic)]
 #[error("resolution error")]
 pub struct ResolutionError {
@@ -20,9 +29,9 @@ pub struct ResolutionError {
 }
 
 pub fn resolve<'src>(
-    x: Program<'src, &'src str, &'src str>,
+    x: ParsedProgram<'src>,
     src: &'src str,
-) -> Result<Program<'src, VResolution, VarId>, ResolutionError> {
+) -> Result<ResolvedProgram<'src>, ResolutionError> {
     let mut resolver = Resolver {
         scopes: vec![HashMap::from([("clock", 1)])],
         next_id: 2,
@@ -31,9 +40,9 @@ pub fn resolve<'src>(
     return resolver.resolve_program(x);
 }
 pub fn resolve_expr_no_var<'src>(
-    x: Expression<'src, &'src str>,
+    x: ParsedExpression<'src>,
     src: &'src str,
-) -> Result<Expression<'src, VResolution>, ResolutionError> {
+) -> Result<ResolvedExpression<'src>, ResolutionError> {
     let resolver = Resolver {
         scopes: vec![],
         next_id: 0,
