@@ -229,6 +229,8 @@ name = "loxwasm"
 version = "0.1.0"
 dependencies = [
  "loxlang",
+ "miette",
+ "thiserror",
  "wasm-bindgen",
 ]
 
