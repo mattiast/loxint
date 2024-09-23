@@ -1,4 +1,30 @@
 #[derive(Debug, Clone)]
+pub enum Expression<'a, Var, Ann> {
+    Nil,
+    StringLiteral(&'a str),
+    NumberLiteral(f64),
+    BooleanLiteral(bool),
+    Identifier(Variable<Var>),
+    Unary {
+        operator: UOperator,
+        right: Box<AnnotatedExpression<'a, Var, Ann>>,
+    },
+    Binary {
+        left: Box<AnnotatedExpression<'a, Var, Ann>>,
+        operator: BOperator,
+        right: Box<AnnotatedExpression<'a, Var, Ann>>,
+    },
+    Assignment(Variable<Var>, Box<AnnotatedExpression<'a, Var, Ann>>),
+    FunctionCall(
+        Box<AnnotatedExpression<'a, Var, Ann>>,
+        Vec<AnnotatedExpression<'a, Var, Ann>>,
+    ),
+    // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
+    // TODO Should there be some link to where this was defined in the source?
+    // Generic annotation for each node?
+}
+pub type AnnotatedExpression<'a, Var, Ann> = Annotated<Expression<'a, Var, Ann>, Ann>;
+#[derive(Debug, Clone)]
 pub struct Annotated<T, A> {
     pub value: T,
     pub annotation: A,
@@ -51,33 +77,6 @@ pub enum Declaration<'a, VR, VD, Ann> {
 pub struct Program<'a, VR, VD, Ann> {
     pub decls: Vec<Declaration<'a, VR, VD, Ann>>,
 }
-
-#[derive(Debug, Clone)]
-pub enum Expression<'a, Var, Ann> {
-    Nil,
-    StringLiteral(&'a str),
-    NumberLiteral(f64),
-    BooleanLiteral(bool),
-    Identifier(Variable<Var>),
-    Unary {
-        operator: UOperator,
-        right: Box<AnnotatedExpression<'a, Var, Ann>>,
-    },
-    Binary {
-        left: Box<AnnotatedExpression<'a, Var, Ann>>,
-        operator: BOperator,
-        right: Box<AnnotatedExpression<'a, Var, Ann>>,
-    },
-    Assignment(Variable<Var>, Box<AnnotatedExpression<'a, Var, Ann>>),
-    FunctionCall(
-        Box<AnnotatedExpression<'a, Var, Ann>>,
-        Vec<AnnotatedExpression<'a, Var, Ann>>,
-    ),
-    // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
-    // TODO Should there be some link to where this was defined in the source?
-    // Generic annotation for each node?
-}
-pub type AnnotatedExpression<'a, Var, Ann> = Annotated<Expression<'a, Var, Ann>, Ann>;
 
 #[derive(Debug, Clone)]
 pub enum UOperator {
