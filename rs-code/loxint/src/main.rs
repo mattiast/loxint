@@ -1,6 +1,6 @@
 use loxlang::parser;
+use loxlang::resolution::resolve_expr_no_var;
 use loxlang::scanner::parse_tokens;
-use loxlang::{eval_expr::run_declaration, resolution::resolve_expr_no_var};
 use miette::Result;
 use std::io::Write;
 use std::path::PathBuf;
@@ -15,9 +15,10 @@ fn main() -> Result<()> {
             let tokens = parse_tokens(&source)?;
             let program = parser::Parser::new(&source, &tokens).parse_program()?;
             let program = loxlang::resolution::resolve(program, &source)?;
-            let mut env = loxlang::execution_env::ExecEnv::new_default();
+            let env = loxlang::execution_env::ExecEnv::new_default();
+            let mut runtime = loxlang::eval_expr::Runtime::new(source.clone(), env);
             for stmt in program.decls {
-                run_declaration(&stmt, &mut env).unwrap();
+                runtime.run_declaration(&stmt).unwrap();
             }
             Ok(())
         }
@@ -35,8 +36,9 @@ fn main() -> Result<()> {
                 eprintln!("Unparsed tokens");
             }
             println!("{:?}", e);
-            let mut env = loxlang::execution_env::ExecEnv::new_default();
-            println!("{:?}", loxlang::eval_expr::eval(&e, &mut env));
+            let env = loxlang::execution_env::ExecEnv::new_default();
+            let mut runtime = loxlang::eval_expr::Runtime::new(input.clone(), env);
+            println!("{:?}", runtime.eval(&e));
             Ok(())
         }
     }
