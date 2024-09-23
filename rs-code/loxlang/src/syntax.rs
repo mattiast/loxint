@@ -1,7 +1,7 @@
 #[derive(Debug, Clone)]
-struct Annotated<T, A> {
-    value: T,
-    annotation: A,
+pub struct Annotated<T, A> {
+    pub value: T,
+    pub annotation: A,
 }
 #[derive(Debug, Clone)]
 pub enum Statement<'a, VR, VD, Ann> {
@@ -32,10 +32,6 @@ pub struct ForLoopDef<'a, VR, VD, Ann> {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Variable<Var>(pub Var);
-
-// TODO Add a type parameter and field for annotation data (name resolution)
-pub type VarId = u64;
-pub type VResolution = (VarId, usize);
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct VariableDecl<Var>(pub Var);
@@ -81,7 +77,7 @@ pub enum Expression<'a, Var, Ann> {
     // TODO Should there be some link to where this was defined in the source?
     // Generic annotation for each node?
 }
-type AnnotatedExpression<'a, Var, Ann> = Annotated<Expression<'a, Var, Ann>, Ann>;
+pub type AnnotatedExpression<'a, Var, Ann> = Annotated<Expression<'a, Var, Ann>, Ann>;
 
 #[derive(Debug, Clone)]
 pub enum UOperator {
@@ -107,6 +103,14 @@ pub enum BOperator {
     GreaterEqual,
 }
 
+impl<'a, Var, Ann> Expression<'a, Var, Ann> {
+    pub fn annotate(self, annotation: Ann) -> Annotated<Self, Ann> {
+        Annotated {
+            value: self,
+            annotation,
+        }
+    }
+}
 impl<'a, Ann> Expression<'a, &'a str, Ann> {
     pub fn pretty_print(&self) -> String {
         match self {

@@ -1,4 +1,7 @@
-use crate::syntax::{Statement, VResolution, VarId, VariableDecl};
+use crate::{
+    resolution::{VResolution, VarId},
+    syntax::{Statement, VariableDecl},
+};
 use std::{
     collections::HashMap,
     fmt::Debug,

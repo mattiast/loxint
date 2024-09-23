@@ -5,11 +5,11 @@ use thiserror::Error;
 
 use crate::{
     parser::{ParsedExpression, ParsedProgram},
-    syntax::{
-        Declaration, Expression, ForLoopDef, Program, Statement, VResolution, VarId, Variable,
-        VariableDecl,
-    },
+    syntax::{Declaration, Expression, ForLoopDef, Program, Statement, Variable, VariableDecl},
 };
+
+pub type VarId = u64;
+pub type VResolution = (VarId, usize);
 
 pub type ResolvedExpression<'src> = Expression<'src, VResolution>;
 pub type ResolvedStatement<'src> = Statement<'src, VResolution, VarId>;
