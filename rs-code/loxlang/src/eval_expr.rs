@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
+use crate::parser::ByteSpan;
 use crate::resolution::{ResolvedDeclaration, ResolvedExpression, ResolvedStatement};
 use crate::syntax::{
     BOperator, Declaration, Expression, Statement, UOperator, Variable, VariableDecl,
@@ -15,9 +16,16 @@ use crate::syntax::{
 pub struct RuntimeError {
     // #[source_code]
     // pub src: &'static str,
-    // #[label("Something wrong here")]
-    // pub source_offset: SourceOffset,
+    #[label("Something wrong here")]
+    pub source_offset: miette::SourceSpan,
     pub msg: &'static str,
+}
+
+fn err(msg: &'static str, span: ByteSpan) -> RuntimeError {
+    RuntimeError {
+        source_offset: span.into(),
+        msg,
+    }
 }
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
@@ -26,27 +34,24 @@ pub fn eval<'src, Dep: Deps>(
     e: &ResolvedExpression<'src>,
     stack: &mut ExecEnv<'src, Dep>,
 ) -> Result<Value<'src>, RuntimeError> {
-    match e {
+    let span = e.annotation;
+    match &e.value {
         Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
         Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
         Expression::Nil => Ok(Value::Nil),
         Expression::Identifier(Variable(var)) => match stack.lookup(*var) {
             Some(v) => Ok(v),
-            None => Err(RuntimeError {
-                msg: "Identifier not found",
-            }), // should not happen after resolution
+            None => Err(err("Identifier not found", span)), // should not happen after resolution
         },
         Expression::Unary { operator, right } => {
-            let right = eval(right, stack)?;
+            let right = eval(right.as_ref(), stack)?;
             match (operator, right) {
                 (UOperator::MINUS, Value::Number(n)) => Ok(Value::Number(-n)),
                 (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
                 (UOperator::BANG, Value::Nil) => Ok(Value::Boolean(true)),
                 // TODO Truthiness?
-                _ => Err(RuntimeError {
-                    msg: "Unary operator not supported for this type",
-                }),
+                _ => Err(err("Unary operator not supported for this type", span)),
             }
         }
         Expression::Binary {
@@ -54,26 +59,26 @@ pub fn eval<'src, Dep: Deps>(
             operator,
             right,
         } => {
-            let left = eval(left, stack)?;
+            let left = eval(left.as_ref(), stack)?;
             match (left, operator) {
                 // First check some cases where we may shor-circuit and not evaluate the right side
                 (Value::Boolean(l), BOperator::AND) => {
                     if !l {
                         Ok(Value::Boolean(false))
                     } else {
-                        eval(right, stack)
+                        eval(right.as_ref(), stack)
                     }
                 }
                 (Value::Boolean(l), BOperator::OR) => {
                     if l {
                         Ok(Value::Boolean(true))
                     } else {
-                        eval(right, stack)
+                        eval(right.as_ref(), stack)
                     }
                 }
                 (left, _) => {
                     // In rest of the cases we always need to evaluate both operands
-                    let right = eval(right, stack)?;
+                    let right = eval(right.as_ref(), stack)?;
                     match (left, operator, right) {
                         (Value::Number(l), BOperator::PLUS, Value::Number(r)) => {
                             Ok(Value::Number(l + r))
@@ -104,24 +109,23 @@ pub fn eval<'src, Dep: Deps>(
                         }
                         (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
                         (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
-                        _ => Err(RuntimeError {
-                            msg: "Binary not supported for these types",
-                        }),
+                        _ => Err(err("Binary not supported for these types", span)),
                     }
                 }
             }
         }
         Expression::Assignment(Variable(name), value) => {
-            let val = eval(value, stack)?;
+            let val = eval(value.as_ref(), stack)?;
             match stack.assign(*name, val.clone()) {
                 Ok(()) => Ok(val),
-                Err(NotFound) => Err(RuntimeError {
-                    msg: "Variable not found (should not happen after resolution)",
-                }),
+                Err(NotFound) => Err(err(
+                    "Variable not found (should not happen after resolution)",
+                    span,
+                )),
             }
         }
         Expression::FunctionCall(f, args) => {
-            let f = eval(f, stack)?;
+            let f = eval(f.as_ref(), stack)?;
             let args = args
                 .iter()
                 .map(|a| eval(a, stack))
@@ -129,9 +133,10 @@ pub fn eval<'src, Dep: Deps>(
             match f {
                 Value::Function(f) => {
                     if args.len() != f.arguments.len() {
-                        return Err(RuntimeError {
-                            msg: "Wrong number of arguments in function application",
-                        });
+                        return Err(err(
+                            "Wrong number of arguments in function application",
+                            span,
+                        ));
                     }
                     // We need to temporarily replace the stack with the function's environment,
                     // evaluate the function body, and then restore the old stack.
@@ -156,14 +161,13 @@ pub fn eval<'src, Dep: Deps>(
                     if args.is_empty() {
                         Ok(Value::Number(stack.clock()))
                     } else {
-                        Err(RuntimeError {
-                            msg: "Wrong number of arguments in function application",
-                        })
+                        Err(err(
+                            "Wrong number of arguments in function application",
+                            span,
+                        ))
                     }
                 }
-                _ => Err(RuntimeError {
-                    msg: "Not a function",
-                }),
+                _ => Err(err("Not a function", span)),
             }
         }
     }
@@ -190,6 +194,7 @@ pub fn run_statement<'src, Dep: Deps>(
             Ok(())
         }),
         Statement::If(cond, stmt_then, stmt_else) => {
+            let span = cond.annotation;
             let cond_val = eval(cond, env)?;
             match cond_val {
                 Value::Boolean(true) => run_statement(stmt_then, env),
@@ -200,12 +205,11 @@ pub fn run_statement<'src, Dep: Deps>(
                         Ok(())
                     }
                 }
-                _ => Err(RuntimeError {
-                    msg: "Condition value not a boolean",
-                }), // Not a boolean
+                _ => Err(err("Condition value not a boolean", span)),
             }
         }
         Statement::While(cond, body) => loop {
+            let span = cond.annotation;
             let cond_val = eval(cond, env)?;
             match cond_val {
                 Value::Boolean(true) => run_statement(body, env)?,
@@ -213,9 +217,7 @@ pub fn run_statement<'src, Dep: Deps>(
                     return Ok(());
                 }
                 _ => {
-                    return Err(RuntimeError {
-                        msg: "Condition value not a boolean",
-                    });
+                    return Err(err("Condition value not a boolean", span));
                 }
             }
         },
@@ -234,13 +236,12 @@ pub fn run_statement<'src, Dep: Deps>(
                 loop {
                     // Evaluate the condition
                     let cond_val = if let Some(ref cond) = loopdef.cond {
+                        let span = cond.annotation;
                         let cond_val = eval(cond, env)?;
                         match cond_val {
                             Value::Boolean(x) => x,
                             _ => {
-                                return Err(RuntimeError {
-                                    msg: "Condition value not a boolean",
-                                });
+                                return Err(err("Condition value not a boolean", span));
                             }
                         }
                     } else {
@@ -268,7 +269,11 @@ pub fn run_declaration<'src, Dep: Deps>(
 ) -> Result<(), RuntimeError> {
     match s {
         Declaration::Var(VariableDecl(s), e) => {
-            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env)?;
+            let v = if let Some(e) = e {
+                eval(e, env)?
+            } else {
+                Value::Nil
+            };
             env.declare(*s, v);
             Ok(())
         }

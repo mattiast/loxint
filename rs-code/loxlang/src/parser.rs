@@ -33,7 +33,7 @@ pub enum ParseError {
     },
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ByteSpan {
     pub start: usize,
     pub end: usize,
@@ -62,12 +62,6 @@ pub type ParsedExpression<'src> = AnnotatedExpression<'src, &'src str, ByteSpan>
 pub type ParsedStatement<'src> = Statement<'src, &'src str, &'src str, ByteSpan>;
 pub type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str, ByteSpan>;
 pub type ParsedProgram<'src> = Program<'src, &'src str, &'src str, ByteSpan>;
-
-fn combine_spans(a: ByteSpan, b: ByteSpan) -> ByteSpan {
-    let start = std::cmp::min(a.start, b.start);
-    let end = std::cmp::max(a.end, b.end);
-    ByteSpan { start, end }
-}
 
 pub struct Parser<'list, 'src> {
     remaining: &'list [(Token<'src>, Range<usize>)],
