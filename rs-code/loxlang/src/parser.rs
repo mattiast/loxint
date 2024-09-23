@@ -34,9 +34,9 @@ pub enum ParseError {
 }
 
 #[derive(Clone, Copy)]
-struct ByteSpan {
-    start: usize,
-    end: usize,
+pub struct ByteSpan {
+    pub start: usize,
+    pub end: usize,
 }
 impl ByteSpan {
     fn len(&self) -> usize {
