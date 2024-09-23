@@ -1,15 +1,20 @@
 #[derive(Debug, Clone)]
-pub enum Statement<'a, VR, VD> {
-    Expression(Expression<'a, VR>),
-    Print(Expression<'a, VR>),
-    Block(Vec<Declaration<'a, VR, VD>>),
+struct Annotated<T, A> {
+    value: T,
+    annotation: A,
+}
+#[derive(Debug, Clone)]
+pub enum Statement<'a, VR, VD, Ann> {
+    Expression(Expression<'a, VR, Ann>),
+    Print(Expression<'a, VR, Ann>),
+    Block(Vec<Declaration<'a, VR, VD, Ann>>),
     If(
-        Expression<'a, VR>,
-        Box<Statement<'a, VR, VD>>,
-        Option<Box<Statement<'a, VR, VD>>>,
+        Expression<'a, VR, Ann>,
+        Box<Statement<'a, VR, VD, Ann>>,
+        Option<Box<Statement<'a, VR, VD, Ann>>>,
     ),
-    While(Expression<'a, VR>, Box<Statement<'a, VR, VD>>),
-    For(ForLoopDef<'a, VR, VD>, Box<Statement<'a, VR, VD>>),
+    While(Expression<'a, VR, Ann>, Box<Statement<'a, VR, VD, Ann>>),
+    For(ForLoopDef<'a, VR, VD, Ann>, Box<Statement<'a, VR, VD, Ann>>),
     // Return(Expression<'a>),
 }
 /// Combination of `var_name` and `start` has 4 cases:
@@ -18,11 +23,11 @@ pub enum Statement<'a, VR, VD> {
 /// 3. var_name is None and start is Some: this is `x = 0;` case where an existing variable is used, and the expression is typically an assignment
 /// 4. Both are none: here the first part is empty `for(;...)`, initialization is done outside the loop
 #[derive(Debug, Clone)]
-pub struct ForLoopDef<'a, VR, VD> {
+pub struct ForLoopDef<'a, VR, VD, Ann> {
     pub var_name: Option<VariableDecl<VD>>,
-    pub start: Option<Expression<'a, VR>>,
-    pub cond: Option<Expression<'a, VR>>,
-    pub increment: Option<Expression<'a, VR>>,
+    pub start: Option<Expression<'a, VR, Ann>>,
+    pub cond: Option<Expression<'a, VR, Ann>>,
+    pub increment: Option<Expression<'a, VR, Ann>>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -36,23 +41,23 @@ pub type VResolution = (VarId, usize);
 pub struct VariableDecl<Var>(pub Var);
 
 #[derive(Debug, Clone)]
-pub enum Declaration<'a, VR, VD> {
-    Var(VariableDecl<VD>, Option<Expression<'a, VR>>),
+pub enum Declaration<'a, VR, VD, Ann> {
+    Var(VariableDecl<VD>, Option<Expression<'a, VR, Ann>>),
     Function {
         name: VariableDecl<VD>,
         args: Vec<VariableDecl<VD>>,
-        body: Statement<'a, VR, VD>,
+        body: Statement<'a, VR, VD, Ann>,
     },
-    Statement(Statement<'a, VR, VD>),
+    Statement(Statement<'a, VR, VD, Ann>),
 }
 
 #[derive(Debug, Clone)]
-pub struct Program<'a, VR, VD> {
-    pub decls: Vec<Declaration<'a, VR, VD>>,
+pub struct Program<'a, VR, VD, Ann> {
+    pub decls: Vec<Declaration<'a, VR, VD, Ann>>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression<'a, Var> {
+pub enum Expression<'a, Var, Ann> {
     Nil,
     StringLiteral(&'a str),
     NumberLiteral(f64),
@@ -60,19 +65,23 @@ pub enum Expression<'a, Var> {
     Identifier(Variable<Var>),
     Unary {
         operator: UOperator,
-        right: Box<Expression<'a, Var>>,
+        right: Box<AnnotatedExpression<'a, Var, Ann>>,
     },
     Binary {
-        left: Box<Expression<'a, Var>>,
+        left: Box<AnnotatedExpression<'a, Var, Ann>>,
         operator: BOperator,
-        right: Box<Expression<'a, Var>>,
+        right: Box<AnnotatedExpression<'a, Var, Ann>>,
     },
-    Assignment(Variable<Var>, Box<Expression<'a, Var>>),
-    FunctionCall(Box<Expression<'a, Var>>, Vec<Expression<'a, Var>>),
+    Assignment(Variable<Var>, Box<AnnotatedExpression<'a, Var, Ann>>),
+    FunctionCall(
+        Box<AnnotatedExpression<'a, Var, Ann>>,
+        Vec<AnnotatedExpression<'a, Var, Ann>>,
+    ),
     // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
     // TODO Should there be some link to where this was defined in the source?
     // Generic annotation for each node?
 }
+type AnnotatedExpression<'a, Var, Ann> = Annotated<Expression<'a, Var, Ann>, Ann>;
 
 #[derive(Debug, Clone)]
 pub enum UOperator {
@@ -98,7 +107,7 @@ pub enum BOperator {
     GreaterEqual,
 }
 
-impl<'a> Expression<'a, &'a str> {
+impl<'a, Ann> Expression<'a, &'a str, Ann> {
     pub fn pretty_print(&self) -> String {
         match self {
             Expression::Nil => "nil".to_string(),
@@ -107,7 +116,7 @@ impl<'a> Expression<'a, &'a str> {
             Expression::BooleanLiteral(b) => format!("{}", b),
             Expression::Identifier(Variable(s)) => format!("{}", s),
             Expression::Unary { operator, right } => {
-                format!("({:?} {})", operator, right.pretty_print())
+                format!("({:?} {})", operator, right.value.pretty_print())
             }
             Expression::Binary {
                 left,
@@ -117,17 +126,19 @@ impl<'a> Expression<'a, &'a str> {
                 format!(
                     "({:?} {} {})",
                     operator,
-                    left.pretty_print(),
-                    right.pretty_print(),
+                    left.value.pretty_print(),
+                    right.value.pretty_print(),
                 )
             }
-            Expression::Assignment(Variable(s), e) => format!("(SET {} {})", s, e.pretty_print()),
+            Expression::Assignment(Variable(s), e) => {
+                format!("(SET {} {})", s, e.value.pretty_print())
+            }
             Expression::FunctionCall(e, args) => {
                 format!(
                     "(CALL {} {})",
-                    e.pretty_print(),
+                    e.value.pretty_print(),
                     args.iter()
-                        .map(|arg| arg.pretty_print())
+                        .map(|arg| arg.value.pretty_print())
                         .collect::<Vec<_>>()
                         .join(" ")
                 )
