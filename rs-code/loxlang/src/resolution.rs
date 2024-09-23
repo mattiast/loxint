@@ -4,17 +4,17 @@ use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
 use crate::{
-    parser::{ParsedExpression, ParsedProgram},
+    parser::{ByteSpan, ParsedExpression, ParsedProgram},
     syntax::{Declaration, Expression, ForLoopDef, Program, Statement, Variable, VariableDecl},
 };
 
 pub type VarId = u64;
 pub type VResolution = (VarId, usize);
 
-pub type ResolvedExpression<'src> = Expression<'src, VResolution>;
-pub type ResolvedStatement<'src> = Statement<'src, VResolution, VarId>;
-pub type ResolvedDeclaration<'src> = Declaration<'src, VResolution, VarId>;
-pub type ResolvedProgram<'src> = Program<'src, VResolution, VarId>;
+pub type ResolvedExpression<'src> = Expression<'src, VResolution, ByteSpan>;
+pub type ResolvedStatement<'src> = Statement<'src, VResolution, VarId, ByteSpan>;
+pub type ResolvedDeclaration<'src> = Declaration<'src, VResolution, VarId, ByteSpan>;
+pub type ResolvedProgram<'src> = Program<'src, VResolution, VarId, ByteSpan>;
 
 // TODO use `miette::Error::with_source_code` instead of passing the source here
 #[derive(Error, Debug, Diagnostic)]
@@ -86,36 +86,54 @@ impl<'src> Resolver<'src> {
     }
     fn resolve_expr(
         &self,
-        x: Expression<'src, &'src str>,
-    ) -> Result<Expression<'src, VResolution>, ResolutionError> {
-        match x {
+        x: ParsedExpression<'src>,
+    ) -> Result<ResolvedExpression<'src>, ResolutionError> {
+        let ann = x.annotation;
+        match x.value {
             Expression::Nil => Ok(Expression::Nil),
             Expression::StringLiteral(s) => Ok(Expression::StringLiteral(s)),
             Expression::NumberLiteral(n) => Ok(Expression::NumberLiteral(n)),
             Expression::BooleanLiteral(b) => Ok(Expression::BooleanLiteral(b)),
-            Expression::Unary { operator, right } => Ok(Expression::Unary {
-                operator,
-                right: Box::new(self.resolve_expr(*right)?),
-            }),
+            Expression::Unary { operator, right } => {
+                let ann = right.annotation;
+                Ok(Expression::Unary {
+                    operator,
+                    right: Box::new(self.resolve_expr(*right)?.annotate(ann)),
+                })
+            }
             Expression::Binary {
                 left,
                 operator,
                 right,
-            } => Ok(Expression::Binary {
-                left: Box::new(self.resolve_expr(*left)?),
-                operator,
-                right: Box::new(self.resolve_expr(*right)?),
-            }),
-            Expression::FunctionCall(f, args) => Ok(Expression::FunctionCall(
-                Box::new(self.resolve_expr(*f)?),
-                args.into_iter()
-                    .map(|a| self.resolve_expr(a))
-                    .collect::<Result<Vec<_>, _>>()?,
-            )),
+            } => {
+                let l_ann = left.annotation;
+                let r_ann = right.annotation;
+                Ok(Expression::Binary {
+                    left: Box::new(self.resolve_expr(*left)?.annotate(l_ann)),
+                    operator,
+                    right: Box::new(self.resolve_expr(*right)?.annotate(r_ann)),
+                })
+            }
+            Expression::FunctionCall(f, args) => {
+                let ann = f.annotation;
+                Ok(Expression::FunctionCall(
+                    Box::new(self.resolve_expr(*f)?.annotate(ann)),
+                    args.into_iter()
+                        .map(|a| {
+                            let ann = a.annotation;
+                            Ok(self.resolve_expr(a)?.annotate(ann))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
+            }
             Expression::Assignment(Variable(v), e) => {
                 let r = self.find_variable(v).ok_or_else(|| self.error(v))?;
+                let ann = e.annotation;
                 let e = self.resolve_expr(*e)?;
-                Ok(Expression::Assignment(Variable(r), Box::new(e)))
+                Ok(Expression::Assignment(
+                    Variable(r),
+                    Box::new(e.annotate(ann)),
+                ))
             }
             Expression::Identifier(Variable(v)) => {
                 let r = self.find_variable(v).ok_or_else(|| self.error(v))?;
