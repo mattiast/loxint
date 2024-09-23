@@ -25,7 +25,7 @@ pub enum Value<'src> {
 #[derive(Clone)]
 pub struct LoxFunction<'src> {
     pub arguments: Vec<VariableDecl<VarId>>,
-    pub body: Statement<'src, VResolution, VarId>,
+    pub body: Statement<'src, VResolution, VarId, ()>,
     pub env: Stack<'src>,
 }
 impl Debug for LoxFunction<'_> {
