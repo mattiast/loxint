@@ -1,3 +1,4 @@
+use loxlang::eval_expr::RuntimeError;
 use loxlang::execution_env::Deps;
 use loxlang::execution_env::Value;
 use loxlang::parser;
@@ -20,6 +21,7 @@ impl From<LoxError> for JsValue {
     }
 }
 
+// TODO do these in some other way e.g. with thiserror
 impl From<LexicalError> for LoxError {
     fn from(error: LexicalError) -> Self {
         let mut output = String::new();
@@ -47,6 +49,15 @@ impl From<ResolutionError> for LoxError {
         LoxError(output)
     }
 }
+impl From<RuntimeError> for LoxError {
+    fn from(error: RuntimeError) -> Self {
+        let mut output = String::new();
+        NarratableReportHandler::new()
+            .render_report(&mut output, &error)
+            .unwrap();
+        LoxError(output)
+    }
+}
 
 #[wasm_bindgen]
 pub fn eval_expr(src: String) -> Result<f64, LoxError> {
@@ -62,8 +73,9 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
     let deps = TestDeps {
         printed: Vec::new(),
     };
-    let mut env = loxlang::execution_env::ExecEnv::new(deps);
-    match loxlang::eval_expr::eval(&e, &mut env) {
+    let env = loxlang::execution_env::ExecEnv::new(deps);
+    let mut runtime = loxlang::eval_expr::Runtime::new(src.clone(), env);
+    match runtime.eval(&e) {
         Ok(Value::Number(x)) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),
         _ => Err(LoxError(
@@ -80,12 +92,12 @@ pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
     let deps = TestDeps {
         printed: Vec::new(),
     };
-    let mut env = loxlang::execution_env::ExecEnv::new(deps);
+    let env = loxlang::execution_env::ExecEnv::new(deps);
+    let mut runtime = loxlang::eval_expr::Runtime::new(src.clone(), env);
     for stmt in program.decls {
-        loxlang::eval_expr::run_declaration(&stmt, &mut env)
-            .map_err(|e| LoxError(format!("{:?}", e)))?;
+        runtime.run_declaration(&stmt)?;
     }
-    Ok(env.into_deps().printed)
+    Ok(runtime.into_deps().printed)
 }
 
 struct TestDeps {
