@@ -1,6 +1,6 @@
 use std::mem;
 
-use miette::{Diagnostic, SourceOffset};
+use miette::Diagnostic;
 use thiserror::Error;
 
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
@@ -13,10 +13,11 @@ use crate::syntax::{
 #[derive(Error, Debug, Diagnostic)]
 #[error("runtime_error")]
 pub struct RuntimeError {
-    #[source_code]
-    pub src: String,
-    #[label("Something wrong here")]
-    pub source_offset: SourceOffset,
+    // #[source_code]
+    // pub src: &'static str,
+    // #[label("Something wrong here")]
+    // pub source_offset: SourceOffset,
+    pub msg: &'static str,
 }
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
@@ -32,7 +33,9 @@ pub fn eval<'src, Dep: Deps>(
         Expression::Nil => Ok(Value::Nil),
         Expression::Identifier(Variable(var)) => match stack.lookup(*var) {
             Some(v) => Ok(v),
-            None => Err(()), // Variable not found (should not happen after resolution)
+            None => Err(RuntimeError {
+                msg: "Identifier not found",
+            }), // should not happen after resolution
         },
         Expression::Unary { operator, right } => {
             let right = eval(right, stack)?;
@@ -41,7 +44,9 @@ pub fn eval<'src, Dep: Deps>(
                 (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
                 (UOperator::BANG, Value::Nil) => Ok(Value::Boolean(true)),
                 // TODO Truthiness?
-                _ => Err(()), // Unary not supported for this type
+                _ => Err(RuntimeError {
+                    msg: "Unary operator not supported for this type",
+                }),
             }
         }
         Expression::Binary {
@@ -99,7 +104,9 @@ pub fn eval<'src, Dep: Deps>(
                         }
                         (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
                         (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
-                        _ => Err(()), // Binary not supported for these types
+                        _ => Err(RuntimeError {
+                            msg: "Binary not supported for these types",
+                        }),
                     }
                 }
             }
@@ -108,7 +115,9 @@ pub fn eval<'src, Dep: Deps>(
             let val = eval(value, stack)?;
             match stack.assign(*name, val.clone()) {
                 Ok(()) => Ok(val),
-                Err(NotFound) => Err(()), // Variable not found (should not happen after resolution)
+                Err(NotFound) => Err(RuntimeError {
+                    msg: "Variable not found (should not happen after resolution)",
+                }),
             }
         }
         Expression::FunctionCall(f, args) => {
@@ -120,7 +129,9 @@ pub fn eval<'src, Dep: Deps>(
             match f {
                 Value::Function(f) => {
                     if args.len() != f.arguments.len() {
-                        return Err(()); // Wrong number of arguments
+                        return Err(RuntimeError {
+                            msg: "Wrong number of arguments in function application",
+                        });
                     }
                     // We need to temporarily replace the stack with the function's environment,
                     // evaluate the function body, and then restore the old stack.
@@ -145,10 +156,14 @@ pub fn eval<'src, Dep: Deps>(
                     if args.is_empty() {
                         Ok(Value::Number(stack.clock()))
                     } else {
-                        Err(()) // Wrong number of arguments
+                        Err(RuntimeError {
+                            msg: "Wrong number of arguments in function application",
+                        })
                     }
                 }
-                _ => Err(()), // Not a function
+                _ => Err(RuntimeError {
+                    msg: "Not a function",
+                }),
             }
         }
     }
@@ -185,7 +200,9 @@ pub fn run_statement<'src, Dep: Deps>(
                         Ok(())
                     }
                 }
-                _ => Err(()), // Not a boolean
+                _ => Err(RuntimeError {
+                    msg: "Condition value not a boolean",
+                }), // Not a boolean
             }
         }
         Statement::While(cond, body) => loop {
@@ -196,7 +213,9 @@ pub fn run_statement<'src, Dep: Deps>(
                     return Ok(());
                 }
                 _ => {
-                    return Err(()); // Not a boolean
+                    return Err(RuntimeError {
+                        msg: "Condition value not a boolean",
+                    });
                 }
             }
         },
@@ -219,7 +238,9 @@ pub fn run_statement<'src, Dep: Deps>(
                         match cond_val {
                             Value::Boolean(x) => x,
                             _ => {
-                                return Err(()); // Not a boolean
+                                return Err(RuntimeError {
+                                    msg: "Condition value not a boolean",
+                                });
                             }
                         }
                     } else {
