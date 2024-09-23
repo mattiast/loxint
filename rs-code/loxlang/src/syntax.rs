@@ -31,15 +31,18 @@ pub struct Annotated<T, A> {
 }
 #[derive(Debug, Clone)]
 pub enum Statement<'a, VR, VD, Ann> {
-    Expression(Expression<'a, VR, Ann>),
-    Print(Expression<'a, VR, Ann>),
+    Expression(AnnotatedExpression<'a, VR, Ann>),
+    Print(AnnotatedExpression<'a, VR, Ann>),
     Block(Vec<Declaration<'a, VR, VD, Ann>>),
     If(
-        Expression<'a, VR, Ann>,
+        AnnotatedExpression<'a, VR, Ann>,
         Box<Statement<'a, VR, VD, Ann>>,
         Option<Box<Statement<'a, VR, VD, Ann>>>,
     ),
-    While(Expression<'a, VR, Ann>, Box<Statement<'a, VR, VD, Ann>>),
+    While(
+        AnnotatedExpression<'a, VR, Ann>,
+        Box<Statement<'a, VR, VD, Ann>>,
+    ),
     For(ForLoopDef<'a, VR, VD, Ann>, Box<Statement<'a, VR, VD, Ann>>),
     // Return(Expression<'a>),
 }
@@ -51,9 +54,9 @@ pub enum Statement<'a, VR, VD, Ann> {
 #[derive(Debug, Clone)]
 pub struct ForLoopDef<'a, VR, VD, Ann> {
     pub var_name: Option<VariableDecl<VD>>,
-    pub start: Option<Expression<'a, VR, Ann>>,
-    pub cond: Option<Expression<'a, VR, Ann>>,
-    pub increment: Option<Expression<'a, VR, Ann>>,
+    pub start: Option<AnnotatedExpression<'a, VR, Ann>>,
+    pub cond: Option<AnnotatedExpression<'a, VR, Ann>>,
+    pub increment: Option<AnnotatedExpression<'a, VR, Ann>>,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -64,7 +67,7 @@ pub struct VariableDecl<Var>(pub Var);
 
 #[derive(Debug, Clone)]
 pub enum Declaration<'a, VR, VD, Ann> {
-    Var(VariableDecl<VD>, Option<Expression<'a, VR, Ann>>),
+    Var(VariableDecl<VD>, Option<AnnotatedExpression<'a, VR, Ann>>),
     Function {
         name: VariableDecl<VD>,
         args: Vec<VariableDecl<VD>>,

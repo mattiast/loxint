@@ -4,7 +4,7 @@ use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
 use crate::{
-    parser::{ByteSpan, ParsedExpression, ParsedProgram},
+    parser::{ByteSpan, ParsedExpression, ParsedProgram, ParsedStatement},
     syntax::{Declaration, Expression, ForLoopDef, Program, Statement, Variable, VariableDecl},
 };
 
@@ -143,8 +143,8 @@ impl<'src> Resolver<'src> {
     }
     fn resolve_statement(
         &mut self,
-        x: Statement<'src, &'src str, &'src str>,
-    ) -> Result<Statement<'src, VResolution, VarId>, ResolutionError> {
+        x: ParsedStatement<'src>,
+    ) -> Result<Statement<'src, VResolution, VarId, ByteSpan>, ResolutionError> {
         match x {
             Statement::Expression(e) => self.resolve_expr(e).map(Statement::Expression),
             Statement::Print(e) => self.resolve_expr(e).map(Statement::Print),

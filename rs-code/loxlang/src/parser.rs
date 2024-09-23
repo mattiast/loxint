@@ -105,7 +105,7 @@ where
         if self.match_and_consume(Token::Reserved(Reserved::PRINT)) {
             let e = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
-            Ok(Statement::Print(e.value))
+            Ok(Statement::Print(e))
         } else if self.peek() == Some(&Token::Symbol(Symbol::LeftBrace)) {
             self.parse_block()
         } else if self.match_and_consume(Token::Reserved(Reserved::IF)) {
@@ -116,19 +116,19 @@ where
             if self.match_and_consume(Token::Reserved(Reserved::ELSE)) {
                 let else_stmt = self.parse_statement()?;
                 Ok(Statement::If(
-                    e.value,
+                    e,
                     Box::new(then_stmt),
                     Some(Box::new(else_stmt)),
                 ))
             } else {
-                Ok(Statement::If(e.value, Box::new(then_stmt), None))
+                Ok(Statement::If(e, Box::new(then_stmt), None))
             }
         } else if self.match_and_consume(Token::Reserved(Reserved::WHILE)) {
             self.consume(&Token::Symbol(Symbol::LeftParen))?;
             let cond = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::RightParen))?;
             let body = self.parse_statement()?;
-            Ok(Statement::While(cond.value, Box::new(body)))
+            Ok(Statement::While(cond, Box::new(body)))
         } else if self.match_and_consume(Token::Reserved(Reserved::FOR)) {
             let loopdef = self.parse_for_loop_line()?;
             let body = self.parse_statement()?;
@@ -136,7 +136,7 @@ where
         } else {
             let e = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
-            Ok(Statement::Expression(e.value))
+            Ok(Statement::Expression(e))
         }
     }
     /// This will match the `(var a = 1; a < 10; a = a + 1)` part of a for loop
@@ -177,9 +177,9 @@ where
         };
         Ok(ForLoopDef {
             var_name,
-            start: start.map(|x| x.value),
-            cond: cond.map(|x| x.value),
-            increment: increment.map(|x| x.value),
+            start,
+            cond,
+            increment,
         })
     }
     pub fn parse_program(
@@ -201,7 +201,7 @@ where
                 None
             };
             self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
-            Ok(Declaration::Var(VariableDecl(name), value.map(|x| x.value)))
+            Ok(Declaration::Var(VariableDecl(name), value))
         } else if self.match_and_consume(Token::Reserved(Reserved::FUN)) {
             let name = self.parse_identifier()?;
             let mut args = Vec::new();
