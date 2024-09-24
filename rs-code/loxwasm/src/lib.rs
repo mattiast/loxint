@@ -1,4 +1,3 @@
-use loxlang::eval_expr::RuntimeError;
 use loxlang::execution_env::Deps;
 use loxlang::execution_env::Value;
 use loxlang::parser;
@@ -6,6 +5,7 @@ use loxlang::parser::ParseError;
 use loxlang::resolution::resolve;
 use loxlang::resolution::resolve_expr_no_var;
 use loxlang::resolution::ResolutionError;
+use loxlang::runtime::RuntimeError;
 use loxlang::scanner;
 use loxlang::scanner::LexicalError;
 use miette::NarratableReportHandler;
@@ -74,7 +74,7 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
         printed: Vec::new(),
     };
     let env = loxlang::execution_env::ExecEnv::new(deps);
-    let mut runtime = loxlang::eval_expr::Runtime::new(src.clone(), env);
+    let mut runtime = loxlang::runtime::Runtime::new(src.clone(), env);
     match runtime.eval(&e) {
         Ok(Value::Number(x)) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),
@@ -93,7 +93,7 @@ pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
         printed: Vec::new(),
     };
     let env = loxlang::execution_env::ExecEnv::new(deps);
-    let mut runtime = loxlang::eval_expr::Runtime::new(src.clone(), env);
+    let mut runtime = loxlang::runtime::Runtime::new(src.clone(), env);
     for stmt in program.decls {
         runtime.run_declaration(&stmt)?;
     }
