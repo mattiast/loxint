@@ -68,7 +68,6 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     (UOperator::MINUS, Value::Number(n)) => Ok(Value::Number(-n)),
                     (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
                     (UOperator::BANG, Value::Nil) => Ok(Value::Boolean(true)),
-                    // TODO Truthiness?
                     _ => Err(self.err("Unary operator not supported for this type", span)),
                 }
             }
@@ -299,7 +298,6 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
     }
 }
 
-// TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
 #[cfg(test)]
 mod tests {

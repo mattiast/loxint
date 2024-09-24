@@ -14,4 +14,3 @@ pub fn parse_program(source: &str) -> Result<RunnableProgram, miette::Error> {
     Ok(program)
 }
 // TODO One error type to include all errors
-// Type alias for Resolved program

@@ -19,9 +19,6 @@ pub enum Expression<'a, Var, Ann> {
         Box<AnnotatedExpression<'a, Var, Ann>>,
         Vec<AnnotatedExpression<'a, Var, Ann>>,
     ),
-    // TODO Supposedly "grouping" node will be needed for LHS of assignment operation
-    // TODO Should there be some link to where this was defined in the source?
-    // Generic annotation for each node?
 }
 pub type AnnotatedExpression<'a, Var, Ann> = Annotated<Expression<'a, Var, Ann>, Ann>;
 #[derive(Debug, Clone)]
@@ -29,6 +26,7 @@ pub struct Annotated<T, A> {
     pub value: T,
     pub annotation: A,
 }
+// TODO Annotation also for Statement and Declaration?
 #[derive(Debug, Clone)]
 pub enum Statement<'a, VR, VD, Ann> {
     Expression(AnnotatedExpression<'a, VR, Ann>),
