@@ -1,7 +1,8 @@
 use crate::{
     scanner::{Reserved, Symbol, Token},
     syntax::{
-        BOperator, Declaration, Expression, ForLoopDef, Program, Statement, UOperator, VarName,
+        BOperator, Declaration, Expression, ForLoopDef, Program, Statement, UOperator, Variable,
+        VariableDecl,
     },
 };
 
@@ -14,6 +15,10 @@ pub enum ParseError {
     Bad,
 }
 
+pub type ParsedStatement<'src> = Statement<'src, &'src str, &'src str>;
+pub type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str>;
+pub type ParsedExpression<'src> = Expression<'src, &'src str>;
+
 impl<'list, 'src> Parser<'list, 'src>
 where
     'src: 'list,
@@ -24,7 +29,7 @@ where
     pub fn done(&self) -> bool {
         self.remaining.is_empty()
     }
-    pub fn parse_statement(&mut self) -> Result<Statement<'src>, ParseError> {
+    pub fn parse_statement(&mut self) -> Result<ParsedStatement<'src>, ParseError> {
         if self.match_and_consume(Token::Reserved(Reserved::PRINT)) {
             let e = self.parse_expr()?;
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
@@ -63,12 +68,14 @@ where
         }
     }
     /// This will match the `(var a = 1; a < 10; a = a + 1)` part of a for loop
-    fn parse_for_loop_line(&mut self) -> Result<ForLoopDef<'src>, ParseError> {
+    fn parse_for_loop_line(
+        &mut self,
+    ) -> Result<ForLoopDef<'src, &'src str, &'src str>, ParseError> {
         self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
         let (var_name, start) = if self.match_and_consume(Token::Symbol(Symbol::SEMICOLON)) {
             (None, None)
         } else if self.match_and_consume(Token::Reserved(Reserved::VAR)) {
-            let var_name = Some(self.parse_identifier()?);
+            let var_name = self.parse_identifier()?;
             let start = if self.match_and_consume(Token::Symbol(Symbol::EQUAL)) {
                 let e = self.parse_expr()?;
                 Some(e)
@@ -76,7 +83,7 @@ where
                 None
             };
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-            (var_name, start)
+            (Some(VariableDecl(var_name)), start)
         } else {
             let e = self.parse_expr()?;
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
@@ -103,14 +110,14 @@ where
             increment,
         })
     }
-    pub fn parse_program(&mut self) -> Result<Program<'src>, ParseError> {
+    pub fn parse_program(&mut self) -> Result<Program<'src, &'src str, &'src str>, ParseError> {
         let mut decls = Vec::new();
         while !self.done() {
             decls.push(self.parse_declaration()?);
         }
         Ok(Program { decls })
     }
-    fn parse_declaration(&mut self) -> Result<Declaration<'src>, ParseError> {
+    fn parse_declaration(&mut self) -> Result<ParsedDeclaration<'src>, ParseError> {
         if self.match_and_consume(Token::Reserved(Reserved::VAR)) {
             let name = self.parse_identifier()?;
             let value = if self.match_and_consume(Token::Symbol(Symbol::EQUAL)) {
@@ -120,7 +127,7 @@ where
                 None
             };
             self.consume(&[Token::Symbol(Symbol::SEMICOLON)])?;
-            Ok(Declaration::Var(name, value))
+            Ok(Declaration::Var(VariableDecl(name), value))
         } else if self.match_and_consume(Token::Reserved(Reserved::FUN)) {
             let name = self.parse_identifier()?;
             let mut args = Vec::new();
@@ -130,7 +137,7 @@ where
             } else {
                 loop {
                     let arg_name = self.parse_identifier()?;
-                    args.push(arg_name);
+                    args.push(VariableDecl(arg_name));
                     if !self.match_and_consume(Token::Symbol(Symbol::COMMA)) {
                         break;
                     }
@@ -139,12 +146,16 @@ where
             }
 
             let body = self.parse_block()?;
-            Ok(Declaration::Function { name, args, body })
+            Ok(Declaration::Function {
+                name: VariableDecl(name),
+                args,
+                body,
+            })
         } else {
             self.parse_statement().map(Declaration::Statement)
         }
     }
-    fn parse_block(&mut self) -> Result<Statement<'src>, ParseError> {
+    fn parse_block(&mut self) -> Result<ParsedStatement<'src>, ParseError> {
         self.consume(&[Token::Symbol(Symbol::LeftBrace)])?;
         let mut decls = Vec::new();
         while !self.match_and_consume(Token::Symbol(Symbol::RightBrace)) {
@@ -155,10 +166,10 @@ where
     fn peek(&self) -> Option<&Token<'src>> {
         self.remaining.first()
     }
-    pub fn parse_expr(&mut self) -> Result<Expression<'src>, ParseError> {
+    pub fn parse_expr(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         self.parse_assignment()
     }
-    fn parse_assignment(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_assignment(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let left = self.parse_logic_or()?;
 
         if self.remaining.first() == Some(&Token::Symbol(Symbol::EQUAL)) {
@@ -175,7 +186,7 @@ where
             Ok(left)
         }
     }
-    fn parse_logic_or(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_logic_or(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut left = self.parse_logic_and()?;
         loop {
             if self.match_and_consume(Token::Reserved(Reserved::OR)) {
@@ -191,7 +202,7 @@ where
         }
         Ok(left)
     }
-    fn parse_logic_and(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_logic_and(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut left = self.parse_equality()?;
         loop {
             if self.match_and_consume(Token::Reserved(Reserved::AND)) {
@@ -208,19 +219,19 @@ where
         Ok(left)
     }
 
-    fn parse_grouping(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_grouping(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         self.consume(&[Token::Symbol(Symbol::LeftParen)])?;
         let e = self.parse_expr()?;
         self.consume(&[Token::Symbol(Symbol::RightParen)])?;
         Ok(e)
     }
 
-    fn parse_primary(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_primary(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         match self.remaining.first() {
             Some(Token::Symbol(Symbol::LeftParen)) => self.parse_grouping(),
             Some(Token::Identifier(id)) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::Identifier(VarName(id)))
+                Ok(Expression::Identifier(Variable(id)))
             }
             Some(Token::NumberLiteral(n)) => {
                 self.remaining = &self.remaining[1..];
@@ -246,7 +257,7 @@ where
         }
     }
 
-    fn parse_unary(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_unary(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let operator = if self.match_and_consume(Token::Symbol(Symbol::MINUS)) {
             Some(UOperator::MINUS)
         } else if self.match_and_consume(Token::Symbol(Symbol::BANG)) {
@@ -265,7 +276,7 @@ where
             }
         }
     }
-    fn parse_call(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_call(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut expr = self.parse_primary()?;
         // Parse any number of calls
         while self.match_and_consume(Token::Symbol(Symbol::LeftParen)) {
@@ -287,7 +298,7 @@ where
         Ok(expr)
     }
 
-    fn parse_factor(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_factor(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut left = self.parse_unary()?;
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::STAR)) {
@@ -310,7 +321,7 @@ where
         }
         Ok(left)
     }
-    fn parse_term(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_term(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut left = self.parse_factor()?;
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::PLUS)) {
@@ -333,7 +344,7 @@ where
         }
         Ok(left)
     }
-    fn parse_comparison(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_comparison(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut left = self.parse_term()?;
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::GREATER)) {
@@ -370,7 +381,7 @@ where
         }
         Ok(left)
     }
-    fn parse_equality(&mut self) -> Result<Expression<'src>, ParseError> {
+    fn parse_equality(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut left = self.parse_comparison()?;
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::BangEqual)) {
@@ -394,11 +405,11 @@ where
         Ok(left)
     }
 
-    fn parse_identifier(&mut self) -> Result<VarName<'src>, ParseError> {
+    fn parse_identifier(&mut self) -> Result<&'src str, ParseError> {
         match self.remaining.first() {
             Some(Token::Identifier(s)) => {
                 self.remaining = &self.remaining[1..];
-                Ok(VarName(s))
+                Ok(s)
             }
             _ => Err(ParseError::Bad),
         }

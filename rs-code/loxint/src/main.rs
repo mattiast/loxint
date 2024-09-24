@@ -1,6 +1,6 @@
-use loxlang::eval_expr::run_declaration;
 use loxlang::parser;
 use loxlang::scanner::parse_tokens;
+use loxlang::{eval_expr::run_declaration, resolution::resolve_expr_no_var};
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -15,6 +15,7 @@ fn main() {
             assert_eq!(rest, "");
             let mut parser = parser::Parser::new(&tokens);
             let program = parser.parse_program().unwrap();
+            let program = loxlang::resolution::resolve(program).unwrap();
             let mut env = loxlang::execution_env::ExecEnv::new_default();
             for stmt in program.decls {
                 run_declaration(&stmt, &mut env).unwrap();
@@ -32,6 +33,7 @@ fn main() {
             }
             let mut p = parser::Parser::new(&tokens);
             let e = p.parse_expr().unwrap();
+            let e = resolve_expr_no_var(e).unwrap();
             if !p.done() {
                 eprintln!("Unparsed tokens");
             }

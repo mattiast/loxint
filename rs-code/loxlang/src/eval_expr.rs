@@ -2,14 +2,17 @@ use std::mem;
 
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
-use crate::syntax::{BOperator, Declaration, Expression, Statement, UOperator};
+use crate::syntax::{
+    BOperator, Declaration, Expression, Statement, UOperator, VResolution, VarId, Variable,
+    VariableDecl,
+};
 
 type EvalError = ();
 
 // TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
 pub fn eval<'src, Dep: Deps>(
-    e: &Expression<'src>,
+    e: &Expression<'src, VResolution>,
     stack: &mut ExecEnv<'src, Dep>,
 ) -> Result<Value<'src>, EvalError> {
     match e {
@@ -17,7 +20,7 @@ pub fn eval<'src, Dep: Deps>(
         Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
         Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
         Expression::Nil => Ok(Value::Nil),
-        Expression::Identifier(var) => match stack.lookup(var) {
+        Expression::Identifier(Variable(var)) => match stack.lookup(*var) {
             Some(v) => Ok(v),
             None => Err(()),
         },
@@ -91,9 +94,9 @@ pub fn eval<'src, Dep: Deps>(
                 }
             }
         }
-        Expression::Assignment(name, value) => {
+        Expression::Assignment(Variable(name), value) => {
             let val = eval(value, stack)?;
-            match stack.assign(name.clone(), val.clone()) {
+            match stack.assign(*name, val.clone()) {
                 Ok(()) => Ok(val),
                 Err(NotFound) => Err(()),
             }
@@ -115,8 +118,10 @@ pub fn eval<'src, Dep: Deps>(
                     let old_stack = mem::replace(&mut stack.stack, f.env.clone());
 
                     let result = stack.run_in_substack(|stack| {
-                        for (arg_name, arg_value) in f.arguments.iter().zip(args.into_iter()) {
-                            stack.declare(arg_name.clone(), arg_value);
+                        for (VariableDecl(arg_name), arg_value) in
+                            f.arguments.iter().zip(args.into_iter())
+                        {
+                            stack.declare(*arg_name, arg_value);
                         }
                         run_statement(&f.body, stack)?;
                         // TODO return values
@@ -140,7 +145,7 @@ pub fn eval<'src, Dep: Deps>(
 }
 
 pub fn run_statement<'src, Dep: Deps>(
-    s: &Statement<'src>,
+    s: &Statement<'src, VResolution, VarId>,
     env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {
@@ -187,19 +192,16 @@ pub fn run_statement<'src, Dep: Deps>(
         },
         Statement::For(loopdef, body) => {
             // We need to create a new stack frame for the loop, where the declaration is executed
+            let start = loopdef
+                .start
+                .as_ref()
+                .map(|e| eval(e, env))
+                .transpose()?
+                .unwrap_or(Value::Nil);
             env.run_in_substack(|env| {
-                match loopdef.var_name {
-                    Some(ref var_name) => {
-                        let decl = Declaration::Var(var_name.clone(), loopdef.start.clone());
-                        run_declaration(&decl, env)
-                    }
-                    None => {
-                        if let Some(ref start) = loopdef.start {
-                            eval(start, env)?;
-                        }
-                        Ok(())
-                    }
-                }?;
+                if let Some(VariableDecl(var_name)) = loopdef.var_name {
+                    env.declare(var_name, start);
+                }
                 loop {
                     // Evaluate the condition
                     let cond_val = if let Some(ref cond) = loopdef.cond {
@@ -230,13 +232,13 @@ pub fn run_statement<'src, Dep: Deps>(
 }
 
 pub fn run_declaration<'src, Dep: Deps>(
-    s: &Declaration<'src>,
+    s: &Declaration<'src, VResolution, VarId>,
     env: &mut ExecEnv<'src, Dep>,
 ) -> Result<(), EvalError> {
     match s {
-        Declaration::Var(s, e) => {
+        Declaration::Var(VariableDecl(s), e) => {
             let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env)?;
-            env.declare(s.clone(), v);
+            env.declare(*s, v);
             Ok(())
         }
         Declaration::Statement(stmt) => run_statement(stmt, env),
@@ -246,7 +248,7 @@ pub fn run_declaration<'src, Dep: Deps>(
                 body: body.clone(),
                 env: env.stack.clone(),
             };
-            env.declare(name.clone(), Value::Function(func));
+            env.declare(name.0, Value::Function(func));
             Ok(())
         }
     }
@@ -275,14 +277,25 @@ mod tests {
         }
     }
 
-    #[test]
-    fn run_program() {
+    fn get_output(source: &str) -> Vec<String> {
         let deps = TestDeps {
             printed: Vec::new(),
             time: 0.0,
         };
         let mut env = ExecEnv::new(deps);
-        // Define program as a multiline string, and parse it
+        let (rest, tokens) = parse_tokens(source).unwrap();
+        assert_eq!(rest, "");
+        let mut parser = parser::Parser::new(&tokens);
+        let program = parser.parse_program().unwrap();
+        let program = crate::resolution::resolve(program).unwrap();
+        for stmt in program.decls {
+            run_declaration(&stmt, &mut env).unwrap();
+        }
+        env.into_deps().printed
+    }
+
+    #[test]
+    fn run_program() {
         let source = r#"
             var a = "hi";
             var b = 3;
@@ -292,24 +305,11 @@ mod tests {
             print b+1;
             }
         "#;
-        let (rest, tokens) = parse_tokens(source).unwrap();
-        assert_eq!(rest, "");
-        let mut parser = parser::Parser::new(&tokens);
-        let program = parser.parse_program().unwrap();
-        for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
-        }
-        let deps = env.into_deps();
-        assert_eq!(deps.printed, vec!["String(\"hi\")", "Number(4.0)"]);
+        let output = get_output(source);
+        assert_eq!(output, vec!["String(\"hi\")", "Number(4.0)"]);
     }
     #[test]
     fn for_loop() {
-        let deps = TestDeps {
-            printed: Vec::new(),
-            time: 0.0,
-        };
-        let mut env = ExecEnv::new(deps);
-        // Define program as a multiline string, and parse it
         let source = r#"
             fun f() {
                 for(var a = 1; a <= 4; a = a+1) {
@@ -319,27 +319,14 @@ mod tests {
             }
             f();
         "#;
-        let (rest, tokens) = parse_tokens(source).unwrap();
-        assert_eq!(rest, "");
-        let mut parser = parser::Parser::new(&tokens);
-        let program = parser.parse_program().unwrap();
-        for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
-        }
-        let deps = env.into_deps();
+        let output = get_output(source);
         assert_eq!(
-            deps.printed,
+            output,
             vec!["Number(1.0)", "Number(3.0)", "Number(5.0)", "Number(7.0)"]
         );
     }
     #[test]
     fn closure() {
-        let deps = TestDeps {
-            printed: Vec::new(),
-            time: 0.0,
-        };
-        let mut env = ExecEnv::new(deps);
-        // Define program as a multiline string, and parse it
         let source = r#"
             var f = 0;
             {
@@ -352,17 +339,23 @@ mod tests {
             }
             f();f();f();
         "#;
-        let (rest, tokens) = parse_tokens(source).unwrap();
-        assert_eq!(rest, "");
-        let mut parser = parser::Parser::new(&tokens);
-        let program = parser.parse_program().unwrap();
-        for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
-        }
-        let deps = env.into_deps();
-        assert_eq!(
-            deps.printed,
-            vec!["Number(0.0)", "Number(1.0)", "Number(2.0)"]
-        );
+        let output = get_output(source);
+        assert_eq!(output, vec!["Number(0.0)", "Number(1.0)", "Number(2.0)"]);
+    }
+    #[test]
+    fn resolution() {
+        let source = r#"
+            var a = 1;
+            {
+                fun f() {
+                    print a;
+                }
+                f();
+                var a = 2;
+                f();
+            }
+        "#;
+        let output = get_output(source);
+        assert_eq!(output, vec!["Number(1.0)", "Number(1.0)"]);
     }
 }
