@@ -11,6 +11,9 @@ use crate::{
     },
 };
 
+// TODO what about mutually recursive functions? On global and local level?
+// Should functions be resolved differently?
+
 pub type VarId = u64;
 pub type VResolution = (VarId, usize);
 
