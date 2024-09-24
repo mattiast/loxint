@@ -1,258 +1,305 @@
 use std::mem;
 
+use miette::Diagnostic;
+use thiserror::Error;
+
 use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
+use crate::parser::ByteSpan;
 use crate::resolution::{ResolvedDeclaration, ResolvedExpression, ResolvedStatement};
 use crate::syntax::{
     BOperator, Declaration, Expression, Statement, UOperator, Variable, VariableDecl,
 };
 
-type EvalError = ();
+#[derive(Error, Debug, Diagnostic)]
+#[error("runtime_error")]
+pub struct RuntimeError {
+    #[source_code]
+    pub src: String,
+    #[label("Something wrong here")]
+    pub source_offset: miette::SourceSpan,
+    pub msg: &'static str,
+}
 
-// TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
+pub struct Runtime<'src, Dep: Deps> {
+    env: ExecEnv<'src, Dep>,
+    src: String,
+}
 
-pub fn eval<'src, Dep: Deps>(
-    e: &ResolvedExpression<'src>,
-    stack: &mut ExecEnv<'src, Dep>,
-) -> Result<Value<'src>, EvalError> {
-    match e {
-        Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
-        Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
-        Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
-        Expression::Nil => Ok(Value::Nil),
-        Expression::Identifier(Variable(var)) => match stack.lookup(*var) {
-            Some(v) => Ok(v),
-            None => Err(()),
-        },
-        Expression::Unary { operator, right } => {
-            let right = eval(right, stack)?;
-            match (operator, right) {
-                (UOperator::MINUS, Value::Number(n)) => Ok(Value::Number(-n)),
-                (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
-                (UOperator::BANG, Value::Nil) => Ok(Value::Boolean(true)),
-                // TODO Truthiness?
-                _ => Err(()),
-            }
+impl<'src, Dep: Deps> Runtime<'src, Dep> {
+    pub fn new(src: String, env: ExecEnv<'src, Dep>) -> Self {
+        Runtime { env, src }
+    }
+    pub fn into_deps(self) -> Dep {
+        self.env.into_deps()
+    }
+    fn err(&self, msg: &'static str, span: ByteSpan) -> RuntimeError {
+        RuntimeError {
+            source_offset: span.into(),
+            msg,
+            src: self.src.clone(),
         }
-        Expression::Binary {
-            left,
-            operator,
-            right,
-        } => {
-            let left = eval(left, stack)?;
-            match (left, operator) {
-                // First check some cases where we may shor-circuit and not evaluate the right side
-                (Value::Boolean(l), BOperator::AND) => {
-                    if !l {
-                        Ok(Value::Boolean(false))
-                    } else {
-                        eval(right, stack)
-                    }
-                }
-                (Value::Boolean(l), BOperator::OR) => {
-                    if l {
-                        Ok(Value::Boolean(true))
-                    } else {
-                        eval(right, stack)
-                    }
-                }
-                (left, _) => {
-                    // In rest of the cases we always need to evaluate both operands
-                    let right = eval(right, stack)?;
-                    match (left, operator, right) {
-                        (Value::Number(l), BOperator::PLUS, Value::Number(r)) => {
-                            Ok(Value::Number(l + r))
-                        }
-                        (Value::String(l), BOperator::PLUS, Value::String(r)) => {
-                            Ok(Value::String(l + &r))
-                        }
-                        (Value::Number(l), BOperator::MINUS, Value::Number(r)) => {
-                            Ok(Value::Number(l - r))
-                        }
-                        (Value::Number(l), BOperator::STAR, Value::Number(r)) => {
-                            Ok(Value::Number(l * r))
-                        }
-                        (Value::Number(l), BOperator::SLASH, Value::Number(r)) => {
-                            Ok(Value::Number(l / r))
-                        } // div by zero?
-                        (Value::Number(l), BOperator::LESS, Value::Number(r)) => {
-                            Ok(Value::Boolean(l < r))
-                        }
-                        (Value::Number(l), BOperator::LessEqual, Value::Number(r)) => {
-                            Ok(Value::Boolean(l <= r))
-                        }
-                        (Value::Number(l), BOperator::GREATER, Value::Number(r)) => {
-                            Ok(Value::Boolean(l > r))
-                        }
-                        (Value::Number(l), BOperator::GreaterEqual, Value::Number(r)) => {
-                            Ok(Value::Boolean(l >= r))
-                        }
-                        (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
-                        (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
-                        _ => Err(()),
-                    }
+    }
+
+    fn run_in_substack<F, U>(&mut self, f: F) -> U
+    where
+        F: FnOnce(&mut Runtime<'src, Dep>) -> U,
+    {
+        // TODO Gosh
+        self.env.stack.go_to_local_env();
+        let v = f(self);
+        self.env.stack.go_to_parent_env();
+        v
+    }
+    pub fn eval(&mut self, e: &ResolvedExpression<'src>) -> Result<Value<'src>, RuntimeError> {
+        let span = e.annotation;
+        match &e.value {
+            Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
+            Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
+            Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
+            Expression::Nil => Ok(Value::Nil),
+            Expression::Identifier(Variable(var)) => match self.env.lookup(*var) {
+                Some(v) => Ok(v),
+                None => Err(self.err("Identifier not found", span)), // should not happen after resolution
+            },
+            Expression::Unary { operator, right } => {
+                let right = self.eval(right.as_ref())?;
+                match (operator, right) {
+                    (UOperator::MINUS, Value::Number(n)) => Ok(Value::Number(-n)),
+                    (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
+                    (UOperator::BANG, Value::Nil) => Ok(Value::Boolean(true)),
+                    // TODO Truthiness?
+                    _ => Err(self.err("Unary operator not supported for this type", span)),
                 }
             }
-        }
-        Expression::Assignment(Variable(name), value) => {
-            let val = eval(value, stack)?;
-            match stack.assign(*name, val.clone()) {
-                Ok(()) => Ok(val),
-                Err(NotFound) => Err(()),
-            }
-        }
-        Expression::FunctionCall(f, args) => {
-            let f = eval(f, stack)?;
-            let args = args
-                .iter()
-                .map(|a| eval(a, stack))
-                .collect::<Result<Vec<_>, _>>()?;
-            match f {
-                Value::Function(f) => {
-                    if args.len() != f.arguments.len() {
-                        return Err(());
-                    }
-                    // We need to temporarily replace the stack with the function's environment,
-                    // evaluate the function body, and then restore the old stack.
-                    // TODO: no huh huh, this should use some sort of RAII or another callback thing
-                    let old_stack = mem::replace(&mut stack.stack, f.env.clone());
-
-                    let result = stack.run_in_substack(|stack| {
-                        for (VariableDecl(arg_name), arg_value) in
-                            f.arguments.iter().zip(args.into_iter())
-                        {
-                            stack.declare(*arg_name, arg_value);
+            Expression::Binary {
+                left,
+                operator,
+                right,
+            } => {
+                let left = self.eval(left.as_ref())?;
+                match (left, operator) {
+                    // First check some cases where we may shor-circuit and not evaluate the right side
+                    (Value::Boolean(l), BOperator::AND) => {
+                        if !l {
+                            Ok(Value::Boolean(false))
+                        } else {
+                            self.eval(right.as_ref())
                         }
-                        run_statement(&f.body, stack)?;
-                        // TODO return values
-                        // Should run_statement take a Continuation as a parameter??
-                        Ok(Value::Nil)
-                    });
-                    stack.stack = old_stack;
-                    result
-                }
-                Value::NativeFunction(NativeFunc::Clock) => {
-                    if args.is_empty() {
-                        Ok(Value::Number(stack.clock()))
-                    } else {
-                        Err(())
+                    }
+                    (Value::Boolean(l), BOperator::OR) => {
+                        if l {
+                            Ok(Value::Boolean(true))
+                        } else {
+                            self.eval(right.as_ref())
+                        }
+                    }
+                    (left, _) => {
+                        // In rest of the cases we always need to evaluate both operands
+                        let right = self.eval(right.as_ref())?;
+                        match (left, operator, right) {
+                            (Value::Number(l), BOperator::PLUS, Value::Number(r)) => {
+                                Ok(Value::Number(l + r))
+                            }
+                            (Value::String(l), BOperator::PLUS, Value::String(r)) => {
+                                Ok(Value::String(l + &r))
+                            }
+                            (Value::Number(l), BOperator::MINUS, Value::Number(r)) => {
+                                Ok(Value::Number(l - r))
+                            }
+                            (Value::Number(l), BOperator::STAR, Value::Number(r)) => {
+                                Ok(Value::Number(l * r))
+                            }
+                            (Value::Number(l), BOperator::SLASH, Value::Number(r)) => {
+                                Ok(Value::Number(l / r))
+                            } // div by zero?
+                            (Value::Number(l), BOperator::LESS, Value::Number(r)) => {
+                                Ok(Value::Boolean(l < r))
+                            }
+                            (Value::Number(l), BOperator::LessEqual, Value::Number(r)) => {
+                                Ok(Value::Boolean(l <= r))
+                            }
+                            (Value::Number(l), BOperator::GREATER, Value::Number(r)) => {
+                                Ok(Value::Boolean(l > r))
+                            }
+                            (Value::Number(l), BOperator::GreaterEqual, Value::Number(r)) => {
+                                Ok(Value::Boolean(l >= r))
+                            }
+                            (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
+                            (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
+                            _ => Err(self.err("Binary not supported for these types", span)),
+                        }
                     }
                 }
-                _ => Err(()),
+            }
+            Expression::Assignment(Variable(name), value) => {
+                let val = self.eval(value.as_ref())?;
+                match self.env.assign(*name, val.clone()) {
+                    Ok(()) => Ok(val),
+                    Err(NotFound) => Err(self.err(
+                        "Variable not found (should not happen after resolution)",
+                        span,
+                    )),
+                }
+            }
+            Expression::FunctionCall(f, args) => {
+                let f = self.eval(f.as_ref())?;
+                let args = args
+                    .iter()
+                    .map(|a| self.eval(a))
+                    .collect::<Result<Vec<_>, _>>()?;
+                match f {
+                    Value::Function(f) => {
+                        if args.len() != f.arguments.len() {
+                            return Err(
+                                self.err("Wrong number of arguments in function application", span)
+                            );
+                        }
+                        // We need to temporarily replace the stack with the function's environment,
+                        // evaluate the function body, and then restore the old stack.
+                        // TODO: no huh huh, this should use some sort of RAII or another callback thing
+                        let old_stack = mem::replace(&mut self.env.stack, f.env.clone());
+
+                        let result = self.run_in_substack(|runtime| {
+                            for (VariableDecl(arg_name), arg_value) in
+                                f.arguments.iter().zip(args.into_iter())
+                            {
+                                runtime.env.declare(*arg_name, arg_value);
+                            }
+                            runtime.run_statement(&f.body)?;
+                            // TODO return values
+                            // Should run_statement take a Continuation as a parameter??
+                            Ok(Value::Nil)
+                        });
+                        self.env.stack = old_stack;
+                        result
+                    }
+                    Value::NativeFunction(NativeFunc::Clock) => {
+                        if args.is_empty() {
+                            Ok(Value::Number(self.env.clock()))
+                        } else {
+                            Err(self.err("Wrong number of arguments in function application", span))
+                        }
+                    }
+                    _ => Err(self.err("Not a function", span)),
+                }
             }
         }
     }
-}
 
-pub fn run_statement<'src, Dep: Deps>(
-    s: &ResolvedStatement<'src>,
-    env: &mut ExecEnv<'src, Dep>,
-) -> Result<(), EvalError> {
-    match s {
-        Statement::Expression(e) => {
-            let _ = eval(e, env)?;
-            Ok(())
-        }
-        Statement::Print(e) => {
-            let v = eval(e, env)?;
-            env.print(v);
-            Ok(())
-        }
-        Statement::Block(decls) => env.run_in_substack(|env| {
-            for d in decls {
-                run_declaration(d, env)?;
+    pub fn run_statement(&mut self, s: &ResolvedStatement<'src>) -> Result<(), RuntimeError> {
+        match s {
+            Statement::Expression(e) => {
+                let _ = self.eval(e)?;
+                Ok(())
             }
-            Ok(())
-        }),
-        Statement::If(cond, stmt_then, stmt_else) => {
-            let cond_val = eval(cond, env)?;
-            match cond_val {
-                Value::Boolean(true) => run_statement(stmt_then, env),
-                Value::Boolean(false) => {
-                    if let Some(stmt_else) = stmt_else {
-                        run_statement(stmt_else, env)
-                    } else {
-                        Ok(())
-                    }
-                }
-                _ => Err(()),
+            Statement::Print(e) => {
+                let v = self.eval(e)?;
+                self.env.print(v);
+                Ok(())
             }
-        }
-        Statement::While(cond, body) => loop {
-            let cond_val = eval(cond, env)?;
-            match cond_val {
-                Value::Boolean(true) => run_statement(body, env)?,
-                Value::Boolean(false) => {
-                    return Ok(());
+            Statement::Block(decls) => self.run_in_substack(|runtime| {
+                for d in decls {
+                    runtime.run_declaration(d)?;
                 }
-                _ => {
-                    return Err(());
-                }
-            }
-        },
-        Statement::For(loopdef, body) => {
-            // We need to create a new stack frame for the loop, where the declaration is executed
-            let start = loopdef
-                .start
-                .as_ref()
-                .map(|e| eval(e, env))
-                .transpose()?
-                .unwrap_or(Value::Nil);
-            env.run_in_substack(|env| {
-                if let Some(VariableDecl(var_name)) = loopdef.var_name {
-                    env.declare(var_name, start);
-                }
-                loop {
-                    // Evaluate the condition
-                    let cond_val = if let Some(ref cond) = loopdef.cond {
-                        let cond_val = eval(cond, env)?;
-                        match cond_val {
-                            Value::Boolean(x) => x,
-                            _ => {
-                                return Err(());
-                            }
+                Ok(())
+            }),
+            Statement::If(cond, stmt_then, stmt_else) => {
+                let span = cond.annotation;
+                let cond_val = self.eval(cond)?;
+                match cond_val {
+                    Value::Boolean(true) => self.run_statement(stmt_then),
+                    Value::Boolean(false) => {
+                        if let Some(stmt_else) = stmt_else {
+                            self.run_statement(stmt_else)
+                        } else {
+                            Ok(())
                         }
-                    } else {
-                        true
-                    };
-                    // If the condition is false, end the loop
-                    if !cond_val {
+                    }
+                    _ => Err(self.err("Condition value not a boolean", span)),
+                }
+            }
+            Statement::While(cond, body) => loop {
+                let span = cond.annotation;
+                let cond_val = self.eval(cond)?;
+                match cond_val {
+                    Value::Boolean(true) => self.run_statement(body)?,
+                    Value::Boolean(false) => {
                         return Ok(());
                     }
-                    // Evaluate the body
-                    run_statement(body, env)?;
-                    // Evaluate the increment
-                    if let Some(ref inc) = loopdef.increment {
-                        eval(inc, env)?;
+                    _ => {
+                        return Err(self.err("Condition value not a boolean", span));
                     }
                 }
-            })
+            },
+            Statement::For(loopdef, body) => {
+                // We need to create a new stack frame for the loop, where the declaration is executed
+                let start = loopdef
+                    .start
+                    .as_ref()
+                    .map(|e| self.eval(e))
+                    .transpose()?
+                    .unwrap_or(Value::Nil);
+                self.run_in_substack(|runtime| {
+                    if let Some(VariableDecl(var_name)) = loopdef.var_name {
+                        runtime.env.declare(var_name, start);
+                    }
+                    loop {
+                        // Evaluate the condition
+                        let cond_val = if let Some(ref cond) = loopdef.cond {
+                            let span = cond.annotation;
+                            let cond_val = runtime.eval(cond)?;
+                            match cond_val {
+                                Value::Boolean(x) => x,
+                                _ => {
+                                    return Err(runtime.err("Condition value not a boolean", span));
+                                }
+                            }
+                        } else {
+                            true
+                        };
+                        // If the condition is false, end the loop
+                        if !cond_val {
+                            return Ok(());
+                        }
+                        // Evaluate the body
+                        runtime.run_statement(body)?;
+                        // Evaluate the increment
+                        if let Some(ref inc) = loopdef.increment {
+                            runtime.eval(inc)?;
+                        }
+                    }
+                })
+            }
+        }
+    }
+
+    pub fn run_declaration(&mut self, s: &ResolvedDeclaration<'src>) -> Result<(), RuntimeError> {
+        match s {
+            Declaration::Var(VariableDecl(s), e) => {
+                let v = if let Some(e) = e {
+                    self.eval(e)?
+                } else {
+                    Value::Nil
+                };
+                self.env.declare(*s, v);
+                Ok(())
+            }
+            Declaration::Statement(stmt) => self.run_statement(stmt),
+            Declaration::Function { name, args, body } => {
+                let func = LoxFunction {
+                    arguments: args.clone(),
+                    body: body.clone(),
+                    env: self.env.stack.clone(),
+                };
+                self.env.declare(name.0, Value::Function(func));
+                Ok(())
+            }
         }
     }
 }
 
-pub fn run_declaration<'src, Dep: Deps>(
-    s: &ResolvedDeclaration<'src>,
-    env: &mut ExecEnv<'src, Dep>,
-) -> Result<(), EvalError> {
-    match s {
-        Declaration::Var(VariableDecl(s), e) => {
-            let v = eval(e.as_ref().unwrap_or(&Expression::Nil), env)?;
-            env.declare(*s, v);
-            Ok(())
-        }
-        Declaration::Statement(stmt) => run_statement(stmt, env),
-        Declaration::Function { name, args, body } => {
-            let func = LoxFunction {
-                arguments: args.clone(),
-                body: body.clone(),
-                env: env.stack.clone(),
-            };
-            env.declare(name.0, Value::Function(func));
-            Ok(())
-        }
-    }
-}
+// TODO Creating a new scope could be done in RAII fashion, and when the "scope goes out of scope", it will pop the environment
 
 #[cfg(test)]
 mod tests {
@@ -282,15 +329,16 @@ mod tests {
             printed: Vec::new(),
             time: 0.0,
         };
-        let mut env = ExecEnv::new(deps);
+        let env = ExecEnv::new(deps);
+        let mut runtime = Runtime::new(source.to_owned(), env);
         let tokens = parse_tokens(source).unwrap();
         let parser = parser::Parser::new(source, &tokens);
         let program = parser.parse_program().unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
         for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
+            runtime.run_declaration(&stmt).unwrap();
         }
-        env.into_deps().printed
+        runtime.into_deps().printed
     }
 
     #[test]

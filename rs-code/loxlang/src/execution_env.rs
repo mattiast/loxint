@@ -1,4 +1,7 @@
-use crate::syntax::{Statement, VResolution, VarId, VariableDecl};
+use crate::{
+    resolution::{ResolvedStatement, VResolution, VarId},
+    syntax::VariableDecl,
+};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -22,7 +25,7 @@ pub enum Value<'src> {
 #[derive(Clone)]
 pub struct LoxFunction<'src> {
     pub arguments: Vec<VariableDecl<VarId>>,
-    pub body: Statement<'src, VResolution, VarId>,
+    pub body: ResolvedStatement<'src>,
     pub env: Stack<'src>,
 }
 impl Debug for LoxFunction<'_> {
@@ -90,7 +93,7 @@ impl<'src> Stack<'src> {
     fn get_env<'a>(&'a self) -> &'a Mutex<StackFrame<'src>> {
         &self.head.env
     }
-    fn go_to_local_env(&mut self) {
+    pub fn go_to_local_env(&mut self) {
         // Can we get rid of clone?
         // The old head is copied but also thrown away
         self.head = Arc::new(Node {
@@ -98,7 +101,7 @@ impl<'src> Stack<'src> {
             parent: Some(self.head.clone()),
         });
     }
-    fn go_to_parent_env(&mut self) {
+    pub fn go_to_parent_env(&mut self) {
         // No huh huh
         // TODO this unwrap doesn't need to be here
         self.head = self.head.as_ref().parent.clone().unwrap();

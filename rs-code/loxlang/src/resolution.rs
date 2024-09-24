@@ -4,17 +4,23 @@ use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
 use crate::{
-    parser::{ParsedExpression, ParsedProgram},
+    parser::{ByteSpan, ParsedDeclaration, ParsedExpression, ParsedProgram, ParsedStatement},
     syntax::{
-        Declaration, Expression, ForLoopDef, Program, Statement, VResolution, VarId, Variable,
+        AnnotatedExpression, Declaration, Expression, ForLoopDef, Program, Statement, Variable,
         VariableDecl,
     },
 };
 
-pub type ResolvedExpression<'src> = Expression<'src, VResolution>;
-pub type ResolvedStatement<'src> = Statement<'src, VResolution, VarId>;
-pub type ResolvedDeclaration<'src> = Declaration<'src, VResolution, VarId>;
-pub type ResolvedProgram<'src> = Program<'src, VResolution, VarId>;
+// TODO what about mutually recursive functions? On global and local level?
+// Should functions be resolved differently?
+
+pub type VarId = u64;
+pub type VResolution = (VarId, usize);
+
+pub type ResolvedExpression<'src> = AnnotatedExpression<'src, VResolution, ByteSpan>;
+pub type ResolvedStatement<'src> = Statement<'src, VResolution, VarId, ByteSpan>;
+pub type ResolvedDeclaration<'src> = Declaration<'src, VResolution, VarId, ByteSpan>;
+pub type ResolvedProgram<'src> = Program<'src, VResolution, VarId, ByteSpan>;
 
 // TODO use `miette::Error::with_source_code` instead of passing the source here
 #[derive(Error, Debug, Diagnostic)]
@@ -86,17 +92,19 @@ impl<'src> Resolver<'src> {
     }
     fn resolve_expr(
         &self,
-        x: Expression<'src, &'src str>,
-    ) -> Result<Expression<'src, VResolution>, ResolutionError> {
-        match x {
-            Expression::Nil => Ok(Expression::Nil),
-            Expression::StringLiteral(s) => Ok(Expression::StringLiteral(s)),
-            Expression::NumberLiteral(n) => Ok(Expression::NumberLiteral(n)),
-            Expression::BooleanLiteral(b) => Ok(Expression::BooleanLiteral(b)),
+        x: ParsedExpression<'src>,
+    ) -> Result<ResolvedExpression<'src>, ResolutionError> {
+        let ann = x.annotation;
+        match x.value {
+            Expression::Nil => Ok(Expression::Nil.annotate(ann)),
+            Expression::StringLiteral(s) => Ok(Expression::StringLiteral(s).annotate(ann)),
+            Expression::NumberLiteral(n) => Ok(Expression::NumberLiteral(n).annotate(ann)),
+            Expression::BooleanLiteral(b) => Ok(Expression::BooleanLiteral(b).annotate(ann)),
             Expression::Unary { operator, right } => Ok(Expression::Unary {
                 operator,
                 right: Box::new(self.resolve_expr(*right)?),
-            }),
+            }
+            .annotate(ann)),
             Expression::Binary {
                 left,
                 operator,
@@ -105,28 +113,33 @@ impl<'src> Resolver<'src> {
                 left: Box::new(self.resolve_expr(*left)?),
                 operator,
                 right: Box::new(self.resolve_expr(*right)?),
-            }),
-            Expression::FunctionCall(f, args) => Ok(Expression::FunctionCall(
-                Box::new(self.resolve_expr(*f)?),
-                args.into_iter()
-                    .map(|a| self.resolve_expr(a))
-                    .collect::<Result<Vec<_>, _>>()?,
-            )),
+            }
+            .annotate(ann)),
+            Expression::FunctionCall(f, args) => {
+                let ann = f.annotation;
+                Ok(Expression::FunctionCall(
+                    Box::new(self.resolve_expr(*f)?),
+                    args.into_iter()
+                        .map(|a| Ok(self.resolve_expr(a)?))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+                .annotate(ann))
+            }
             Expression::Assignment(Variable(v), e) => {
                 let r = self.find_variable(v).ok_or_else(|| self.error(v))?;
                 let e = self.resolve_expr(*e)?;
-                Ok(Expression::Assignment(Variable(r), Box::new(e)))
+                Ok(Expression::Assignment(Variable(r), Box::new(e)).annotate(ann))
             }
             Expression::Identifier(Variable(v)) => {
                 let r = self.find_variable(v).ok_or_else(|| self.error(v))?;
-                Ok(Expression::Identifier(Variable(r)))
+                Ok(Expression::Identifier(Variable(r)).annotate(ann))
             }
         }
     }
     fn resolve_statement(
         &mut self,
-        x: Statement<'src, &'src str, &'src str>,
-    ) -> Result<Statement<'src, VResolution, VarId>, ResolutionError> {
+        x: ParsedStatement<'src>,
+    ) -> Result<Statement<'src, VResolution, VarId, ByteSpan>, ResolutionError> {
         match x {
             Statement::Expression(e) => self.resolve_expr(e).map(Statement::Expression),
             Statement::Print(e) => self.resolve_expr(e).map(Statement::Print),
@@ -182,8 +195,8 @@ impl<'src> Resolver<'src> {
     }
     fn resolve_declaration(
         &mut self,
-        x: Declaration<'src, &'src str, &'src str>,
-    ) -> Result<Declaration<'src, VResolution, VarId>, ResolutionError> {
+        x: ParsedDeclaration<'src>,
+    ) -> Result<ResolvedDeclaration<'src>, ResolutionError> {
         match x {
             Declaration::Var(v, e) => {
                 // First resolve the expression in the scope without the new variable
@@ -204,8 +217,8 @@ impl<'src> Resolver<'src> {
     }
     fn resolve_program(
         &mut self,
-        x: Program<'src, &'src str, &'src str>,
-    ) -> Result<Program<'src, VResolution, VarId>, ResolutionError> {
+        x: ParsedProgram<'src>,
+    ) -> Result<ResolvedProgram<'src>, ResolutionError> {
         Ok(Program {
             decls: x
                 .decls

@@ -1,13 +1,13 @@
-use std::ops::Range;
+use std::ops::{self, Range};
 
-use miette::{Diagnostic, SourceOffset, SourceSpan};
+use miette::{Diagnostic, SourceOffset};
 use thiserror::Error;
 
 use crate::{
     scanner::{Reserved, Symbol, Token},
     syntax::{
-        BOperator, Declaration, Expression, ForLoopDef, Program, Statement, UOperator, Variable,
-        VariableDecl,
+        AnnotatedExpression, BOperator, Declaration, Expression, ForLoopDef, Program, Statement,
+        UOperator, Variable, VariableDecl,
     },
 };
 
@@ -18,7 +18,7 @@ pub enum ParseError {
         #[source_code]
         src: String,
         #[label("Unexpected token")]
-        span: SourceSpan,
+        span: miette::SourceSpan,
         #[help]
         help: String,
     },
@@ -33,10 +33,35 @@ pub enum ParseError {
     },
 }
 
-pub type ParsedExpression<'src> = Expression<'src, &'src str>;
-pub type ParsedStatement<'src> = Statement<'src, &'src str, &'src str>;
-pub type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str>;
-pub type ParsedProgram<'src> = Program<'src, &'src str, &'src str>;
+#[derive(Debug, Clone, Copy)]
+pub struct ByteSpan {
+    pub start: usize,
+    pub end: usize,
+}
+impl ByteSpan {
+    fn len(&self) -> usize {
+        self.end - self.start
+    }
+}
+impl ops::BitOr<ByteSpan> for ByteSpan {
+    type Output = ByteSpan;
+
+    fn bitor(self, rhs: ByteSpan) -> Self::Output {
+        ByteSpan {
+            start: std::cmp::min(self.start, rhs.start),
+            end: std::cmp::max(self.end, rhs.end),
+        }
+    }
+}
+impl From<ByteSpan> for miette::SourceSpan {
+    fn from(value: ByteSpan) -> Self {
+        (value.start, value.len()).into()
+    }
+}
+pub type ParsedExpression<'src> = AnnotatedExpression<'src, &'src str, ByteSpan>;
+pub type ParsedStatement<'src> = Statement<'src, &'src str, &'src str, ByteSpan>;
+pub type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str, ByteSpan>;
+pub type ParsedProgram<'src> = Program<'src, &'src str, &'src str, ByteSpan>;
 
 pub struct Parser<'list, 'src> {
     remaining: &'list [(Token<'src>, Range<usize>)],
@@ -111,7 +136,7 @@ where
     /// This will match the `(var a = 1; a < 10; a = a + 1)` part of a for loop
     fn parse_for_loop_line(
         &mut self,
-    ) -> Result<ForLoopDef<'src, &'src str, &'src str>, ParseError> {
+    ) -> Result<ForLoopDef<'src, &'src str, &'src str, ByteSpan>, ParseError> {
         self.consume(&Token::Symbol(Symbol::LeftParen))?;
         let (var_name, start) = if self.match_and_consume(Token::Symbol(Symbol::SEMICOLON)) {
             (None, None)
@@ -151,7 +176,9 @@ where
             increment,
         })
     }
-    pub fn parse_program(mut self) -> Result<Program<'src, &'src str, &'src str>, ParseError> {
+    pub fn parse_program(
+        mut self,
+    ) -> Result<Program<'src, &'src str, &'src str, ByteSpan>, ParseError> {
         let mut decls = Vec::new();
         while !self.done() {
             decls.push(self.parse_declaration()?);
@@ -216,10 +243,11 @@ where
         if self.peek() == Some(&Token::Symbol(Symbol::EQUAL)) {
             self.consume(&Token::Symbol(Symbol::EQUAL))?;
             let right = self.parse_assignment()?;
-            match left {
+            let ann = left.annotation | right.annotation;
+            match left.value {
                 Expression::Identifier(v) => {
                     let e = Expression::Assignment(v, Box::new(right));
-                    Ok(e)
+                    Ok(e.annotate(ann))
                 }
                 _ => Err(self.error("LHS of an assignment must be a variable")),
             }
@@ -232,11 +260,13 @@ where
         loop {
             if self.match_and_consume(Token::Reserved(Reserved::OR)) {
                 let right = self.parse_logic_and()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::OR,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else {
                 break;
             }
@@ -248,11 +278,13 @@ where
         loop {
             if self.match_and_consume(Token::Reserved(Reserved::AND)) {
                 let right = self.parse_equality()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::AND,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else {
                 break;
             }
@@ -268,31 +300,43 @@ where
     }
 
     fn parse_primary(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
-        match self.remaining.first().map(|x| &x.0) {
-            Some(Token::Symbol(Symbol::LeftParen)) => self.parse_grouping(),
-            Some(Token::Identifier(id)) => {
+        let (token, range) = self
+            .remaining
+            .first()
+            .ok_or_else(|| ParseError::UnexpectedEnd {
+                src: self.src.to_owned(),
+                span: self.src.len().into(),
+                help: "Expected parentheses, identifier or literal".to_owned(),
+            })?;
+        let span = ByteSpan {
+            start: range.start,
+            end: range.end,
+        };
+        match token {
+            Token::Symbol(Symbol::LeftParen) => self.parse_grouping(),
+            Token::Identifier(id) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::Identifier(Variable(id)))
+                Ok(Expression::Identifier(Variable(*id)).annotate(span))
             }
-            Some(Token::NumberLiteral(n)) => {
+            Token::NumberLiteral(n) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::NumberLiteral(*n))
+                Ok(Expression::NumberLiteral(*n).annotate(span))
             }
-            Some(Token::StringLiteral(s)) => {
+            Token::StringLiteral(s) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::StringLiteral(s))
+                Ok(Expression::StringLiteral(s).annotate(span))
             }
-            Some(Token::Reserved(Reserved::FALSE)) => {
+            Token::Reserved(Reserved::FALSE) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::BooleanLiteral(false))
+                Ok(Expression::BooleanLiteral(false).annotate(span))
             }
-            Some(Token::Reserved(Reserved::TRUE)) => {
+            Token::Reserved(Reserved::TRUE) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::BooleanLiteral(true))
+                Ok(Expression::BooleanLiteral(true).annotate(span))
             }
-            Some(Token::Reserved(Reserved::NIL)) => {
+            Token::Reserved(Reserved::NIL) => {
                 self.remaining = &self.remaining[1..];
-                Ok(Expression::Nil)
+                Ok(Expression::Nil.annotate(span))
             }
             _ => Err(self.error("Expected parenthesized expression, identifier, or literal")),
         }
@@ -310,21 +354,26 @@ where
             None => self.parse_call(),
             Some(operator) => {
                 let right = self.parse_unary()?;
+                let ann = right.annotation;
                 Ok(Expression::Unary {
                     operator,
                     right: Box::new(right),
-                })
+                }
+                .annotate(ann))
             }
         }
     }
     fn parse_call(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
         let mut expr = self.parse_primary()?;
         // Parse any number of calls
+        let mut ann = expr.annotation;
         while self.match_and_consume(Token::Symbol(Symbol::LeftParen)) {
             let mut args = vec![];
             if !self.match_and_consume(Token::Symbol(Symbol::RightParen)) {
                 loop {
-                    args.push(self.parse_expr()?);
+                    let e = self.parse_expr()?;
+                    ann = ann | e.annotation;
+                    args.push(e);
                     if !self.match_and_consume(Token::Symbol(Symbol::COMMA)) {
                         break;
                     }
@@ -334,7 +383,7 @@ where
                 }
                 self.consume(&Token::Symbol(Symbol::RightParen))?;
             }
-            expr = Expression::FunctionCall(Box::new(expr), args);
+            expr = Expression::FunctionCall(Box::new(expr), args).annotate(ann);
         }
         Ok(expr)
     }
@@ -344,18 +393,22 @@ where
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::STAR)) {
                 let right = self.parse_unary()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::STAR,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else if self.match_and_consume(Token::Symbol(Symbol::SLASH)) {
                 let right = self.parse_unary()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::SLASH,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else {
                 break;
             }
@@ -367,18 +420,22 @@ where
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::PLUS)) {
                 let right = self.parse_factor()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::PLUS,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else if self.match_and_consume(Token::Symbol(Symbol::MINUS)) {
                 let right = self.parse_factor()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::MINUS,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else {
                 break;
             }
@@ -390,32 +447,40 @@ where
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::GREATER)) {
                 let right = self.parse_term()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::GREATER,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else if self.match_and_consume(Token::Symbol(Symbol::GreaterEqual)) {
                 let right = self.parse_term()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::GreaterEqual,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else if self.match_and_consume(Token::Symbol(Symbol::LESS)) {
                 let right = self.parse_term()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::LESS,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else if self.match_and_consume(Token::Symbol(Symbol::LessEqual)) {
                 let right = self.parse_term()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::LessEqual,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else {
                 break;
             }
@@ -427,18 +492,22 @@ where
         loop {
             if self.match_and_consume(Token::Symbol(Symbol::BangEqual)) {
                 let right = self.parse_comparison()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::BangEqual,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else if self.match_and_consume(Token::Symbol(Symbol::EqualEqual)) {
                 let right = self.parse_comparison()?;
+                let ann = left.annotation | right.annotation;
                 left = Expression::Binary {
                     left: Box::new(left),
                     operator: BOperator::EqualEqual,
                     right: Box::new(right),
-                };
+                }
+                .annotate(ann);
             } else {
                 break;
             }
@@ -491,6 +560,6 @@ mod tests {
             src: "",
         };
         let e = parser.parse_expr().unwrap();
-        assert_eq!(e.pretty_print(), "(LessEqual false 5.5)");
+        assert_eq!(e.value.pretty_print(), "(LessEqual false 5.5)");
     }
 }
