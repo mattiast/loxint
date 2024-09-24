@@ -49,12 +49,16 @@ document.getElementById('executeMultiLineButton').addEventListener('click', exec
 
 function executeMultiLineCode() {
     const code = document.getElementById('multiLineCode').value;
+    const out = document.getElementById('multiLineOutput');
     try {
         const result = run_program(code);
         // Iterate over the array of strings, and join them with newlines
-        document.getElementById('multiLineOutput').value = result.join('\n');
+        out.value = result.join('\n');
+        out.style.backgroundColor = '';
     } catch (error) {
-        document.getElementById('multiLineOutput').value = "Error: " + error;
+        out.value = "Error: \n" + error;
+        // Set background color to light red
+        out.style.backgroundColor = 'lightcoral';
     }
 }
 

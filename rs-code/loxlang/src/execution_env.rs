@@ -100,6 +100,7 @@ impl<'src> Stack<'src> {
     }
     fn go_to_parent_env(&mut self) {
         // No huh huh
+        // TODO this unwrap doesn't need to be here
         self.head = self.head.as_ref().parent.clone().unwrap();
     }
     pub fn lookup(&self, name: VResolution) -> Option<Value<'src>> {

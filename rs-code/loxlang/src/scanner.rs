@@ -1,3 +1,6 @@
+use std::ops::Range;
+
+use miette::{Diagnostic, SourceOffset};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
@@ -6,6 +9,7 @@ use nom::{
     sequence::tuple,
     IResult,
 };
+use thiserror::Error;
 
 #[derive(Debug, PartialEq)]
 pub enum Token<'a> {
@@ -147,16 +151,39 @@ fn parse_token(input: &str) -> IResult<&str, Token> {
     ))(input)
 }
 
-pub fn parse_tokens(input: &str) -> IResult<&str, Vec<Token>> {
-    // TODO change the error type to something that makes sense
+#[derive(Error, Debug, Diagnostic)]
+#[error("lexical_error")]
+pub struct LexicalError {
+    #[source_code]
+    pub src: String,
+    #[label("No valid token here")]
+    pub source_offset: SourceOffset,
+}
+pub fn parse_tokens(input: &str) -> Result<Vec<(Token, Range<usize>)>, LexicalError> {
     let mut tokens = Vec::new();
+    let start = input;
     let mut input = input.trim_start();
     while !input.is_empty() {
-        let (remaining, token) = parse_token(input)?;
-        tokens.push(token);
-        input = remaining.trim_start();
+        let result = parse_token(input);
+        match result {
+            Ok((remaining, token)) => {
+                let range = Range {
+                    start: (input.as_ptr() as usize) - (start.as_ptr() as usize),
+                    end: (remaining.as_ptr() as usize) - (start.as_ptr() as usize),
+                };
+                tokens.push((token, range));
+                input = remaining.trim_start();
+            }
+            Err(_) => {
+                let location = (input.as_ptr() as usize) - (start.as_ptr() as usize);
+                return Err(LexicalError {
+                    src: start.to_owned(),
+                    source_offset: location.into(),
+                });
+            }
+        }
     }
-    Ok((input, tokens))
+    Ok(tokens)
 }
 
 // tests
@@ -203,16 +230,23 @@ mod tests {
     #[test]
     fn test_multiple_tokens() {
         let input = "123.456 \"hello\"+3";
-        let expected = Ok((
-            "",
-            vec![
-                Token::NumberLiteral(123.456),
-                Token::StringLiteral("hello"),
-                Token::Symbol(Symbol::PLUS),
-                Token::NumberLiteral(3.),
-            ],
-        ));
-        let actual = parse_tokens(input);
+        let expected = vec![
+            Token::NumberLiteral(123.456),
+            Token::StringLiteral("hello"),
+            Token::Symbol(Symbol::PLUS),
+            Token::NumberLiteral(3.),
+        ];
+        let actual = parse_tokens(input)
+            .unwrap()
+            .into_iter()
+            .map(|x| x.0)
+            .collect::<Vec<_>>();
         assert_eq!(actual, expected);
+    }
+    #[test]
+    fn test_error() {
+        let input = "123.456 \"hello+3";
+        let actual = parse_tokens(input).unwrap_err();
+        assert_eq!(actual.source_offset.offset(), 8);
     }
 }

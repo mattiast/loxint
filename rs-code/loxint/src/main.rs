@@ -1,25 +1,25 @@
 use loxlang::parser;
 use loxlang::scanner::parse_tokens;
 use loxlang::{eval_expr::run_declaration, resolution::resolve_expr_no_var};
+use miette::Result;
 use std::io::Write;
 use std::path::PathBuf;
 
-fn main() {
+fn main() -> Result<()> {
     let args = Cli::parse();
     match args.command {
         Commands::Run { file } => {
             // read a file into a string and parse a program
             let source = std::fs::read_to_string(&file).unwrap();
             // parse a program from source
-            let (rest, tokens) = parse_tokens(&source).unwrap();
-            assert_eq!(rest, "");
-            let mut parser = parser::Parser::new(&tokens);
-            let program = parser.parse_program().unwrap();
-            let program = loxlang::resolution::resolve(program).unwrap();
+            let tokens = parse_tokens(&source)?;
+            let program = parser::Parser::new(&source, &tokens).parse_program()?;
+            let program = loxlang::resolution::resolve(program, &source)?;
             let mut env = loxlang::execution_env::ExecEnv::new_default();
             for stmt in program.decls {
                 run_declaration(&stmt, &mut env).unwrap();
             }
+            Ok(())
         }
         Commands::Repl => {
             print!("> ");
@@ -27,19 +27,17 @@ fn main() {
             // Read a line from stdin
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap();
-            let (rest, tokens) = parse_tokens(&input).unwrap();
-            if rest != "" {
-                eprintln!("Unparsed input: {}", rest);
-            }
-            let mut p = parser::Parser::new(&tokens);
-            let e = p.parse_expr().unwrap();
-            let e = resolve_expr_no_var(e).unwrap();
+            let tokens = parse_tokens(&input).unwrap();
+            let mut p = parser::Parser::new(&input, &tokens);
+            let e = p.parse_expr()?;
+            let e = resolve_expr_no_var(e, &input).unwrap();
             if !p.done() {
                 eprintln!("Unparsed tokens");
             }
             println!("{:?}", e);
             let mut env = loxlang::execution_env::ExecEnv::new_default();
             println!("{:?}", loxlang::eval_expr::eval(&e, &mut env));
+            Ok(())
         }
     }
 }
