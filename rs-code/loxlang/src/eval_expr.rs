@@ -329,15 +329,16 @@ mod tests {
             printed: Vec::new(),
             time: 0.0,
         };
-        let mut env = ExecEnv::new(deps);
+        let env = ExecEnv::new(deps);
+        let mut runtime = Runtime::new(source.to_owned(), env);
         let tokens = parse_tokens(source).unwrap();
         let parser = parser::Parser::new(source, &tokens);
         let program = parser.parse_program().unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
         for stmt in program.decls {
-            run_declaration(&stmt, &mut env).unwrap();
+            runtime.run_declaration(&stmt).unwrap();
         }
-        env.into_deps().printed
+        runtime.into_deps().printed
     }
 
     #[test]

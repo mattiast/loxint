@@ -560,6 +560,6 @@ mod tests {
             src: "",
         };
         let e = parser.parse_expr().unwrap();
-        assert_eq!(e.pretty_print(), "(LessEqual false 5.5)");
+        assert_eq!(e.value.pretty_print(), "(LessEqual false 5.5)");
     }
 }

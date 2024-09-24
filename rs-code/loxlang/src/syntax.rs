@@ -160,9 +160,9 @@ mod tests {
     fn test_pretty_print_expression() {
         // an expression with a binary operator and two number literals
         let expression = Expression::Binary {
-            left: Box::new(Expression::NumberLiteral(1.0)),
+            left: Box::new(Expression::NumberLiteral(1.0).annotate(())),
             operator: BOperator::PLUS,
-            right: Box::new(Expression::NumberLiteral(2.5)),
+            right: Box::new(Expression::NumberLiteral(2.5).annotate(())),
         };
         let expected = "(PLUS 1 2.5)";
         let actual = expression.pretty_print();
@@ -171,7 +171,7 @@ mod tests {
         // an expression with a unary operator and a boolean literal
         let expression = Expression::Unary {
             operator: UOperator::BANG,
-            right: Box::new(Expression::BooleanLiteral(true)),
+            right: Box::new(Expression::BooleanLiteral(true).annotate(())),
         };
         let expected = "(BANG true)";
         let actual = expression.pretty_print();
