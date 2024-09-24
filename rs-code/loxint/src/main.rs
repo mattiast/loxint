@@ -18,7 +18,7 @@ fn main() -> Result<()> {
             let env = loxlang::execution_env::ExecEnv::new_default();
             let mut runtime = loxlang::runtime::Runtime::new(source.clone(), env);
             for stmt in program.decls {
-                runtime.run_declaration(&stmt).unwrap();
+                runtime.run_declaration(&stmt)?;
             }
             Ok(())
         }
@@ -28,10 +28,10 @@ fn main() -> Result<()> {
             // Read a line from stdin
             let mut input = String::new();
             std::io::stdin().read_line(&mut input).unwrap();
-            let tokens = parse_tokens(&input).unwrap();
+            let tokens = parse_tokens(&input)?;
             let mut p = parser::Parser::new(&input, &tokens);
             let e = p.parse_expr()?;
-            let e = resolve_expr_no_var(e, &input).unwrap();
+            let e = resolve_expr_no_var(e, &input)?;
             if !p.done() {
                 eprintln!("Unparsed tokens");
             }
