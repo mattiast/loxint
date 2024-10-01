@@ -23,11 +23,11 @@ pub struct RuntimeError {
 
 pub struct Runtime<'src, Dep: Deps> {
     env: ExecEnv<'src, Dep>,
-    src: String,
+    src: &'src str,
 }
 
 impl<'src, Dep: Deps> Runtime<'src, Dep> {
-    pub fn new(src: String, env: ExecEnv<'src, Dep>) -> Self {
+    pub fn new(src: &'src str, env: ExecEnv<'src, Dep>) -> Self {
         Runtime { env, src }
     }
     pub fn into_deps(self) -> Dep {
@@ -37,7 +37,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
         RuntimeError {
             source_offset: span.into(),
             msg,
-            src: self.src.clone(),
+            src: self.src.to_owned(),
         }
     }
 
@@ -298,7 +298,6 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::execution_env::Deps;
@@ -328,7 +327,7 @@ mod tests {
             time: 0.0,
         };
         let env = ExecEnv::new(deps);
-        let mut runtime = Runtime::new(source.to_owned(), env);
+        let mut runtime = Runtime::new(source, env);
         let tokens = parse_tokens(source).unwrap();
         let parser = parser::Parser::new(source, &tokens);
         let program = parser.parse_program().unwrap();

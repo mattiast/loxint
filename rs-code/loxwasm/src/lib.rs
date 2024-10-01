@@ -41,7 +41,7 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
         printed: Vec::new(),
     };
     let env = loxlang::execution_env::ExecEnv::new(deps);
-    let mut runtime = loxlang::runtime::Runtime::new(src.clone(), env);
+    let mut runtime = loxlang::runtime::Runtime::new(&src, env);
     match runtime.eval(&e) {
         Ok(Value::Number(x)) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),
@@ -60,7 +60,7 @@ pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
         printed: Vec::new(),
     };
     let env = loxlang::execution_env::ExecEnv::new(deps);
-    let mut runtime = loxlang::runtime::Runtime::new(src.clone(), env);
+    let mut runtime = loxlang::runtime::Runtime::new(&src, env);
     for stmt in program.decls {
         runtime.run_declaration(&stmt)?;
     }

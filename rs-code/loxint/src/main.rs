@@ -34,7 +34,7 @@ fn main() -> Result<()> {
             // parse a program from source
             let program = loxlang::parse_program(&source)?;
             let env = loxlang::execution_env::ExecEnv::new_default();
-            let mut runtime = loxlang::runtime::Runtime::new(source.clone(), env);
+            let mut runtime = loxlang::runtime::Runtime::new(&source, env);
             for stmt in program.decls {
                 runtime.run_declaration(&stmt)?;
             }
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
             }
             println!("{:?}", e);
             let env = loxlang::execution_env::ExecEnv::new_default();
-            let mut runtime = loxlang::runtime::Runtime::new(input.clone(), env);
+            let mut runtime = loxlang::runtime::Runtime::new(&input, env);
             println!("{:?}", runtime.eval(&e));
             Ok(())
         }
