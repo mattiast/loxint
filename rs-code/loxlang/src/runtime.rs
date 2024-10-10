@@ -3,7 +3,7 @@ use std::mem;
 use miette::Diagnostic;
 use thiserror::Error;
 
-use crate::execution_env::{Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
+use crate::execution_env::{AtomicValue, Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
 use crate::parser::ByteSpan;
 use crate::resolution::{ResolvedDeclaration, ResolvedExpression, ResolvedStatement};
@@ -54,10 +54,10 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
     pub fn eval(&mut self, e: &ResolvedExpression<'src>) -> Result<Value<'src>, RuntimeError> {
         let span = e.annotation;
         match &e.value {
-            Expression::NumberLiteral(n) => Ok(Value::Number(*n)),
-            Expression::BooleanLiteral(b) => Ok(Value::Boolean(*b)),
-            Expression::StringLiteral(s) => Ok(Value::String(s.to_string())),
-            Expression::Nil => Ok(Value::Nil),
+            Expression::NumberLiteral(n) => Ok(Value::Atomic(AtomicValue::Number(*n))),
+            Expression::BooleanLiteral(b) => Ok(Value::Atomic(AtomicValue::Boolean(*b))),
+            Expression::StringLiteral(s) => Ok(Value::Atomic(AtomicValue::String(s.to_string()))),
+            Expression::Nil => Ok(Value::Atomic(AtomicValue::Nil)),
             Expression::Identifier(Variable(var)) => match self.env.lookup(*var) {
                 Some(v) => Ok(v),
                 None => Err(self.err("Identifier not found", span)), // should not happen after resolution
@@ -65,9 +65,15 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
             Expression::Unary { operator, right } => {
                 let right = self.eval(right.as_ref())?;
                 match (operator, right) {
-                    (UOperator::MINUS, Value::Number(n)) => Ok(Value::Number(-n)),
-                    (UOperator::BANG, Value::Boolean(b)) => Ok(Value::Boolean(!b)),
-                    (UOperator::BANG, Value::Nil) => Ok(Value::Boolean(true)),
+                    (UOperator::MINUS, Value::Atomic(AtomicValue::Number(n))) => {
+                        Ok(Value::Atomic(AtomicValue::Number(-n)))
+                    }
+                    (UOperator::BANG, Value::Atomic(AtomicValue::Boolean(b))) => {
+                        Ok(Value::Atomic(AtomicValue::Boolean(!b)))
+                    }
+                    (UOperator::BANG, Value::Atomic(AtomicValue::Nil)) => {
+                        Ok(Value::Atomic(AtomicValue::Boolean(true)))
+                    }
                     _ => Err(self.err("Unary operator not supported for this type", span)),
                 }
             }
@@ -79,16 +85,16 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                 let left = self.eval(left.as_ref())?;
                 match (left, operator) {
                     // First check some cases where we may shor-circuit and not evaluate the right side
-                    (Value::Boolean(l), BOperator::AND) => {
+                    (Value::Atomic(AtomicValue::Boolean(l)), BOperator::AND) => {
                         if !l {
-                            Ok(Value::Boolean(false))
+                            Ok(Value::Atomic(AtomicValue::Boolean(false)))
                         } else {
                             self.eval(right.as_ref())
                         }
                     }
-                    (Value::Boolean(l), BOperator::OR) => {
+                    (Value::Atomic(AtomicValue::Boolean(l)), BOperator::OR) => {
                         if l {
-                            Ok(Value::Boolean(true))
+                            Ok(Value::Atomic(AtomicValue::Boolean(true)))
                         } else {
                             self.eval(right.as_ref())
                         }
@@ -97,35 +103,57 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                         // In rest of the cases we always need to evaluate both operands
                         let right = self.eval(right.as_ref())?;
                         match (left, operator, right) {
-                            (Value::Number(l), BOperator::PLUS, Value::Number(r)) => {
-                                Ok(Value::Number(l + r))
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::PLUS,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Number(l + r))),
+                            (
+                                Value::Atomic(AtomicValue::String(l)),
+                                BOperator::PLUS,
+                                Value::Atomic(AtomicValue::String(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::String(l + &r))),
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::MINUS,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Number(l - r))),
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::STAR,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Number(l * r))),
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::SLASH,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Number(l / r))), // div by zero?
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::LESS,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Boolean(l < r))),
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::LessEqual,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Boolean(l <= r))),
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::GREATER,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Boolean(l > r))),
+                            (
+                                Value::Atomic(AtomicValue::Number(l)),
+                                BOperator::GreaterEqual,
+                                Value::Atomic(AtomicValue::Number(r)),
+                            ) => Ok(Value::Atomic(AtomicValue::Boolean(l >= r))),
+                            (l, BOperator::EqualEqual, r) => {
+                                Ok(Value::Atomic(AtomicValue::Boolean(l == r)))
                             }
-                            (Value::String(l), BOperator::PLUS, Value::String(r)) => {
-                                Ok(Value::String(l + &r))
+                            (l, BOperator::BangEqual, r) => {
+                                Ok(Value::Atomic(AtomicValue::Boolean(l != r)))
                             }
-                            (Value::Number(l), BOperator::MINUS, Value::Number(r)) => {
-                                Ok(Value::Number(l - r))
-                            }
-                            (Value::Number(l), BOperator::STAR, Value::Number(r)) => {
-                                Ok(Value::Number(l * r))
-                            }
-                            (Value::Number(l), BOperator::SLASH, Value::Number(r)) => {
-                                Ok(Value::Number(l / r))
-                            } // div by zero?
-                            (Value::Number(l), BOperator::LESS, Value::Number(r)) => {
-                                Ok(Value::Boolean(l < r))
-                            }
-                            (Value::Number(l), BOperator::LessEqual, Value::Number(r)) => {
-                                Ok(Value::Boolean(l <= r))
-                            }
-                            (Value::Number(l), BOperator::GREATER, Value::Number(r)) => {
-                                Ok(Value::Boolean(l > r))
-                            }
-                            (Value::Number(l), BOperator::GreaterEqual, Value::Number(r)) => {
-                                Ok(Value::Boolean(l >= r))
-                            }
-                            (l, BOperator::EqualEqual, r) => Ok(Value::Boolean(l == r)),
-                            (l, BOperator::BangEqual, r) => Ok(Value::Boolean(l != r)),
                             _ => Err(self.err("Binary not supported for these types", span)),
                         }
                     }
@@ -168,14 +196,14 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                             runtime.run_statement(&f.body)?;
                             // TODO return values
                             // Should run_statement take a Continuation as a parameter??
-                            Ok(Value::Nil)
+                            Ok(Value::Atomic(AtomicValue::Nil))
                         });
                         self.env.stack = old_stack;
                         result
                     }
                     Value::NativeFunction(NativeFunc::Clock) => {
                         if args.is_empty() {
-                            Ok(Value::Number(self.env.clock()))
+                            Ok(Value::Atomic(AtomicValue::Number(self.env.clock())))
                         } else {
                             Err(self.err("Wrong number of arguments in function application", span))
                         }
@@ -207,12 +235,15 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                 let span = cond.annotation;
                 let cond_val = self.eval(cond)?;
                 match cond_val {
-                    Value::Boolean(true) => self.run_statement(stmt_then),
-                    Value::Boolean(false) => {
-                        if let Some(stmt_else) = stmt_else {
-                            self.run_statement(stmt_else)
+                    Value::Atomic(AtomicValue::Boolean(b)) => {
+                        if b {
+                            self.run_statement(stmt_then)
                         } else {
-                            Ok(())
+                            if let Some(stmt_else) = stmt_else {
+                                self.run_statement(stmt_else)
+                            } else {
+                                Ok(())
+                            }
                         }
                     }
                     _ => Err(self.err("Condition value not a boolean", span)),
@@ -222,9 +253,12 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                 let span = cond.annotation;
                 let cond_val = self.eval(cond)?;
                 match cond_val {
-                    Value::Boolean(true) => self.run_statement(body)?,
-                    Value::Boolean(false) => {
-                        return Ok(());
+                    Value::Atomic(AtomicValue::Boolean(b)) => {
+                        if b {
+                            self.run_statement(body)?
+                        } else {
+                            return Ok(());
+                        }
                     }
                     _ => {
                         return Err(self.err("Condition value not a boolean", span));
@@ -238,7 +272,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     .as_ref()
                     .map(|e| self.eval(e))
                     .transpose()?
-                    .unwrap_or(Value::Nil);
+                    .unwrap_or(Value::Atomic(AtomicValue::Nil));
                 self.run_in_substack(|runtime| {
                     if let Some(VariableDecl(var_name)) = loopdef.var_name {
                         runtime.env.declare(var_name, start);
@@ -249,7 +283,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                             let span = cond.annotation;
                             let cond_val = runtime.eval(cond)?;
                             match cond_val {
-                                Value::Boolean(x) => x,
+                                Value::Atomic(AtomicValue::Boolean(x)) => x,
                                 _ => {
                                     return Err(runtime.err("Condition value not a boolean", span));
                                 }
@@ -279,7 +313,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                 let v = if let Some(e) = e {
                     self.eval(e)?
                 } else {
-                    Value::Nil
+                    Value::Atomic(AtomicValue::Nil)
                 };
                 self.env.declare(*s, v);
                 Ok(())

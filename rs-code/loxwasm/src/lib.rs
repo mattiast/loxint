@@ -1,3 +1,4 @@
+use loxlang::execution_env::AtomicValue;
 use loxlang::execution_env::Deps;
 use loxlang::execution_env::Value;
 use loxlang::parser;
@@ -43,7 +44,7 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
     let env = loxlang::execution_env::ExecEnv::new(deps);
     let mut runtime = loxlang::runtime::Runtime::new(&src, env);
     match runtime.eval(&e) {
-        Ok(Value::Number(x)) => Ok(x),
+        Ok(Value::Atomic(AtomicValue::Number(x))) => Ok(x),
         Err(e) => Err(LoxError(format!("Evaluation error: {:?}", e))),
         _ => Err(LoxError(
             "Expected number, got non-number value".to_string(),
