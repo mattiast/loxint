@@ -15,10 +15,6 @@ pub enum Value<'src> {
     Boolean(bool),
     String(String),
     Nil,
-    // Callable(Box<dyn Fn(&mut EvalEnv) -> Result<Value, Error>>),
-    // Must also take a list of arguments
-    // And have an "arity" u8
-    // Native functions are a separate type, they are a function item
     NativeFunction(NativeFunc),
     Function(LoxFunction<'src>),
 }

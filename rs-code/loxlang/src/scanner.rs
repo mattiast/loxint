@@ -75,7 +75,7 @@ fn is_letter_digit_or_underscore(c: char) -> bool {
 /// Parses an identifier from the input string.
 /// Identifiers can start with a letter or underscore, and can contain letters, digits, and underscores.
 fn parse_identifier(input: &str) -> IResult<&str, &str> {
-    // TODO this is kind of silly
+    // this will match one or more non-digits, then digits are allowed
     let first_char = take_while1(is_letter_or_underscore);
 
     recognize(tuple((
