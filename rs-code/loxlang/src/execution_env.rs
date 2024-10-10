@@ -10,13 +10,16 @@ use std::{
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value<'src> {
-    // TODO: an own type for "atomic types", i.e. number, boolean, string, nil
+    Atomic(AtomicValue),
+    NativeFunction(NativeFunc),
+    Function(LoxFunction<'src>),
+}
+#[derive(Debug, PartialEq, Clone)]
+pub enum AtomicValue {
     Number(f64),
     Boolean(bool),
     String(String),
     Nil,
-    NativeFunction(NativeFunc),
-    Function(LoxFunction<'src>),
 }
 #[derive(Clone)]
 pub struct LoxFunction<'src> {
