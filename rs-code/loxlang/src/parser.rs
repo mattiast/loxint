@@ -95,7 +95,7 @@ where
             },
         }
     }
-    pub fn parse_statement(&mut self) -> Result<ParsedStatement<'src>, ParseError> {
+    fn parse_statement(&mut self) -> Result<ParsedStatement<'src>, ParseError> {
         if self.match_and_consume(Token::Reserved(Reserved::PRINT)) {
             let e = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
