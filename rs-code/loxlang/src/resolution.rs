@@ -4,6 +4,7 @@ use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
 use crate::{
+    execution_env::NativeFunc,
     parser::{ByteSpan, ParsedDeclaration, ParsedExpression, ParsedProgram, ParsedStatement},
     syntax::{
         AnnotatedExpression, Declaration, Expression, ForLoopDef, Program, Statement, Variable,
@@ -39,8 +40,12 @@ pub fn resolve<'src>(
     src: &'src str,
 ) -> Result<ResolvedProgram<'src>, ResolutionError> {
     let mut resolver = Resolver {
-        scopes: vec![HashMap::from([("clock", 1)])],
-        next_id: 2,
+        scopes: vec![NativeFunc::iter()
+            .enumerate()
+            .map(|(i, nf)| (nf.name(), i as u64))
+            .collect()],
+
+        next_id: NativeFunc::count() as u64,
         src,
     };
     return resolver.resolve_program(x);

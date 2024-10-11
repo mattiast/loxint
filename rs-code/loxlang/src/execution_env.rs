@@ -44,6 +44,19 @@ impl PartialEq for LoxFunction<'_> {
 pub enum NativeFunc {
     Clock,
 }
+impl NativeFunc {
+    pub fn name(&self) -> &'static str {
+        match self {
+            NativeFunc::Clock => "clock",
+        }
+    }
+    pub fn iter() -> impl Iterator<Item = NativeFunc> {
+        [NativeFunc::Clock].into_iter()
+    }
+    pub fn count() -> usize {
+        NativeFunc::iter().count()
+    }
+}
 
 struct StackFrame<'a> {
     values: HashMap<VarId, Value<'a>>,
@@ -78,8 +91,9 @@ struct Node<'src> {
 impl<'src> Stack<'src> {
     pub fn new() -> Self {
         let mut global_env = StackFrame::new();
-        // TODO How to handle builtin functions?
-        global_env.set(1, Value::NativeFunction(NativeFunc::Clock));
+        for (i, func) in NativeFunc::iter().enumerate() {
+            global_env.set(i as u64, Value::NativeFunction(func));
+        }
 
         let node = Node {
             env: Mutex::new(global_env),
