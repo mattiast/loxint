@@ -192,7 +192,7 @@ impl<'src, Dep: Deps> ExecEnv<'src, Dep> {
     pub fn lookup(&self, name: VResolution) -> Option<Value<'src>> {
         self.stack.lookup(name)
     }
-    pub fn assign(&mut self, name: VResolution, value: Value<'src>) -> Result<(), NotFound> {
+    pub fn assign(&self, name: VResolution, value: Value<'src>) -> Result<(), NotFound> {
         self.stack.assign(name, value)
     }
     pub fn declare(&mut self, name: VarId, value: Value<'src>) {
