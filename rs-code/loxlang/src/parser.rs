@@ -6,8 +6,8 @@ use thiserror::Error;
 use crate::{
     scanner::{Reserved, Symbol, Token},
     syntax::{
-        AnnotatedExpression, BOperator, Declaration, Expression, ForLoopDef, Program, Statement,
-        UOperator, Variable, VariableDecl,
+        AnnotatedExpression, BOperator, Declaration, Expression, Program, Statement, UOperator,
+        Variable, VariableDecl,
     },
 };
 
@@ -545,6 +545,18 @@ where
         }
         is_match
     }
+}
+/// Combination of `var_name` and `start` has 4 cases:
+/// 1. var_name is Some and start is Some: this is `var x = 0;` case, the most typical one
+/// 2. var_name is Some and start is None: this is `var x;` case, it is pretty weird but could happen I guess
+/// 3. var_name is None and start is Some: this is `x = 0;` case where an existing variable is used, and the expression is typically an assignment
+/// 4. Both are none: here the first part is empty `for(;...)`, initialization is done outside the loop
+#[derive(Debug, Clone)]
+struct ForLoopDef<'a, VR, VD, Ann> {
+    var_name: Option<VariableDecl<VD>>,
+    start: Option<AnnotatedExpression<'a, VR, Ann>>,
+    cond: Option<AnnotatedExpression<'a, VR, Ann>>,
+    increment: Option<AnnotatedExpression<'a, VR, Ann>>,
 }
 fn for_loop_into_while_loop<'src>(
     loopdef: ForLoopDef<'src, &'src str, &'src str, ByteSpan>,

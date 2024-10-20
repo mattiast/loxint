@@ -44,18 +44,6 @@ pub enum Statement<'a, VR, VD, Ann> {
     // For(ForLoopDef<'a, VR, VD, Ann>, Box<Statement<'a, VR, VD, Ann>>),
     Return(AnnotatedExpression<'a, VR, Ann>),
 }
-/// Combination of `var_name` and `start` has 4 cases:
-/// 1. var_name is Some and start is Some: this is `var x = 0;` case, the most typical one
-/// 2. var_name is Some and start is None: this is `var x;` case, it is pretty weird but could happen I guess
-/// 3. var_name is None and start is Some: this is `x = 0;` case where an existing variable is used, and the expression is typically an assignment
-/// 4. Both are none: here the first part is empty `for(;...)`, initialization is done outside the loop
-#[derive(Debug, Clone)]
-pub struct ForLoopDef<'a, VR, VD, Ann> {
-    pub var_name: Option<VariableDecl<VD>>,
-    pub start: Option<AnnotatedExpression<'a, VR, Ann>>,
-    pub cond: Option<AnnotatedExpression<'a, VR, Ann>>,
-    pub increment: Option<AnnotatedExpression<'a, VR, Ann>>,
-}
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Variable<Var>(pub Var);

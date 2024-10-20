@@ -7,8 +7,7 @@ use crate::{
     execution_env::NativeFunc,
     parser::{ByteSpan, ParsedDeclaration, ParsedExpression, ParsedProgram, ParsedStatement},
     syntax::{
-        AnnotatedExpression, Declaration, Expression, ForLoopDef, Program, Statement, Variable,
-        VariableDecl,
+        AnnotatedExpression, Declaration, Expression, Program, Statement, Variable, VariableDecl,
     },
 };
 
