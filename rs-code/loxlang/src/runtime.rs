@@ -284,48 +284,6 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     }
                 }
             },
-            Statement::For(loopdef, body) => {
-                // We need to create a new stack frame for the loop, where the declaration is executed
-                let start = loopdef
-                    .start
-                    .as_ref()
-                    .map(|e| self.eval(e))
-                    .transpose()?
-                    .unwrap_or(Value::Atomic(AtomicValue::Nil));
-                self.run_in_substack(|runtime| {
-                    if let Some(VariableDecl(var_name)) = loopdef.var_name {
-                        runtime.env.declare(var_name, start);
-                    }
-                    loop {
-                        // Evaluate the condition
-                        let cond_val = if let Some(ref cond) = loopdef.cond {
-                            let span = cond.annotation;
-                            let cond_val = runtime.eval(cond)?;
-                            match cond_val {
-                                Value::Atomic(AtomicValue::Boolean(x)) => x,
-                                _ => {
-                                    return Err(runtime.err("Condition value not a boolean", span));
-                                }
-                            }
-                        } else {
-                            true
-                        };
-                        // If the condition is false, end the loop
-                        if !cond_val {
-                            return Ok(Ok(()));
-                        }
-                        // Evaluate the body
-                        let res = runtime.run_statement(body)?;
-                        if let Err(i) = res {
-                            return Ok(Err(i));
-                        }
-                        // Evaluate the increment
-                        if let Some(ref inc) = loopdef.increment {
-                            runtime.eval(inc)?;
-                        }
-                    }
-                })
-            }
             Statement::Return(expr) => {
                 let value = self.eval(expr)?;
                 Ok(Err(Interrupt::Return(value)))

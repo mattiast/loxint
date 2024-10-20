@@ -41,7 +41,7 @@ pub enum Statement<'a, VR, VD, Ann> {
         AnnotatedExpression<'a, VR, Ann>,
         Box<Statement<'a, VR, VD, Ann>>,
     ),
-    For(ForLoopDef<'a, VR, VD, Ann>, Box<Statement<'a, VR, VD, Ann>>),
+    // For(ForLoopDef<'a, VR, VD, Ann>, Box<Statement<'a, VR, VD, Ann>>),
     Return(AnnotatedExpression<'a, VR, Ann>),
 }
 /// Combination of `var_name` and `start` has 4 cases:

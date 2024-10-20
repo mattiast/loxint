@@ -130,7 +130,7 @@ where
         } else if self.match_and_consume(Token::Reserved(Reserved::FOR)) {
             let loopdef = self.parse_for_loop_line()?;
             let body = self.parse_statement()?;
-            Ok(Statement::For(loopdef, Box::new(body)))
+            Ok(for_loop_into_while_loop(loopdef, body))
         } else {
             let e = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
@@ -545,6 +545,69 @@ where
         }
         is_match
     }
+}
+fn for_loop_into_while_loop<'src>(
+    loopdef: ForLoopDef<'src, &'src str, &'src str, ByteSpan>,
+    body: ParsedStatement<'src>,
+) -> ParsedStatement<'src> {
+    /*
+    Case 1: Variable declaration
+    for (var x = start ; cond ; incr) {body}
+
+    Translates to
+
+    {
+        var x = start;
+        while (cond) {
+            {body}
+            incr
+        }
+    }
+
+    Case 2: No variable declaration
+    for (start ; cond ; incr) {body}
+
+    Translates to
+
+    {
+        start;
+        while (cond) {
+            {body}
+            incr
+        }
+    }
+    */
+    let init_decl: Option<ParsedDeclaration<'src>> = match loopdef.var_name {
+        Some(var_decl) => Some(Declaration::Var(var_decl, loopdef.start)),
+        None => loopdef
+            .start
+            .map(Statement::Expression)
+            .map(Declaration::Statement),
+    };
+    let cond = if let Some(cond) = loopdef.cond {
+        cond
+    } else {
+        Expression::BooleanLiteral(true).annotate(
+            // TODO get the span of the loopdef
+            ByteSpan { start: 0, end: 0 },
+        )
+    };
+    let mut decls = Vec::new();
+    if let Some(decl) = init_decl {
+        decls.push(decl);
+    }
+    decls.push(Declaration::Statement(Statement::While(
+        cond,
+        Box::new(Statement::Block({
+            let mut while_body = Vec::new();
+            while_body.push(Declaration::Statement(body));
+            if let Some(incr) = loopdef.increment {
+                while_body.push(Declaration::Statement(Statement::Expression(incr)));
+            }
+            while_body
+        })),
+    )));
+    Statement::Block(decls)
 }
 
 // tests

@@ -159,33 +159,6 @@ impl<'src> Resolver<'src> {
                 let s = self.resolve_statement(*s)?;
                 Ok(Statement::While(e, Box::new(s)))
             }
-            Statement::For(
-                ForLoopDef {
-                    var_name,
-                    start,
-                    cond,
-                    increment,
-                },
-                s,
-            ) => {
-                let start = start.map(|e| self.resolve_expr(e)).transpose()?;
-                self.scopes.push(HashMap::new());
-                let var_name = var_name.map(|v| self.declare_variable(v));
-                let cond = cond.map(|e| self.resolve_expr(e)).transpose()?;
-                let increment = increment.map(|e| self.resolve_expr(e)).transpose()?;
-
-                let s = self.resolve_statement(*s)?;
-                self.scopes.pop();
-                Ok(Statement::For(
-                    ForLoopDef {
-                        var_name,
-                        start,
-                        cond,
-                        increment,
-                    },
-                    Box::new(s),
-                ))
-            }
             Statement::Block(decls) => {
                 self.scopes.push(HashMap::new());
                 let decls: Vec<_> = decls
