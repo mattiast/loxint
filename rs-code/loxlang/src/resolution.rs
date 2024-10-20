@@ -196,6 +196,7 @@ impl<'src> Resolver<'src> {
 
                 Ok(Statement::Block(decls))
             }
+            Statement::Return(expr) => self.resolve_expr(expr).map(Statement::Return),
         }
     }
     fn resolve_declaration(

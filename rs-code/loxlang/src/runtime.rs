@@ -26,6 +26,13 @@ pub struct Runtime<'src, Dep: Deps> {
     src: &'src str,
 }
 
+#[derive(Debug)]
+pub enum Interrupt<'src> {
+    Return(Value<'src>),
+    Break,
+    Continue,
+}
+
 impl<'src, Dep: Deps> Runtime<'src, Dep> {
     pub fn new(src: &'src str, env: ExecEnv<'src, Dep>) -> Self {
         Runtime { env, src }
@@ -193,10 +200,12 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                             {
                                 runtime.env.declare(*arg_name, arg_value);
                             }
-                            runtime.run_statement(&f.body)?;
-                            // TODO return values
-                            // Should run_statement take a Continuation as a parameter??
-                            Ok(Value::Atomic(AtomicValue::Nil))
+                            let res = runtime.run_statement(&f.body)?;
+                            match res {
+                                Ok(()) => Ok(Value::Atomic(AtomicValue::Nil)),
+                                Err(Interrupt::Return(v)) => Ok(v),
+                                Err(_) => Err(runtime.err("Not in a loop", span)),
+                            }
                         });
                         self.env.stack = old_stack;
                         result
@@ -214,22 +223,29 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
         }
     }
 
-    pub fn run_statement(&mut self, s: &ResolvedStatement<'src>) -> Result<(), RuntimeError> {
+    // Continuation to handle return value
+    fn run_statement(
+        &mut self,
+        s: &ResolvedStatement<'src>,
+    ) -> Result<Result<(), Interrupt<'src>>, RuntimeError> {
         match s {
             Statement::Expression(e) => {
                 let _ = self.eval(e)?;
-                Ok(())
+                Ok(Ok(()))
             }
             Statement::Print(e) => {
                 let v = self.eval(e)?;
                 self.env.print(v);
-                Ok(())
+                Ok(Ok(()))
             }
             Statement::Block(decls) => self.run_in_substack(|runtime| {
                 for d in decls {
-                    runtime.run_declaration(d)?;
+                    let res = runtime.run_declaration(d)?;
+                    if let Err(i) = res {
+                        return Ok(Err(i));
+                    }
                 }
-                Ok(())
+                Ok(Ok(()))
             }),
             Statement::If(cond, stmt_then, stmt_else) => {
                 let span = cond.annotation;
@@ -242,7 +258,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                             if let Some(stmt_else) = stmt_else {
                                 self.run_statement(stmt_else)
                             } else {
-                                Ok(())
+                                Ok(Ok(()))
                             }
                         }
                     }
@@ -255,9 +271,12 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                 match cond_val {
                     Value::Atomic(AtomicValue::Boolean(b)) => {
                         if b {
-                            self.run_statement(body)?
+                            let res = self.run_statement(body)?;
+                            if let Err(i) = res {
+                                return Ok(Err(i));
+                            }
                         } else {
-                            return Ok(());
+                            return Ok(Ok(()));
                         }
                     }
                     _ => {
@@ -293,10 +312,13 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                         };
                         // If the condition is false, end the loop
                         if !cond_val {
-                            return Ok(());
+                            return Ok(Ok(()));
                         }
                         // Evaluate the body
-                        runtime.run_statement(body)?;
+                        let res = runtime.run_statement(body)?;
+                        if let Err(i) = res {
+                            return Ok(Err(i));
+                        }
                         // Evaluate the increment
                         if let Some(ref inc) = loopdef.increment {
                             runtime.eval(inc)?;
@@ -304,10 +326,18 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     }
                 })
             }
+            Statement::Return(expr) => {
+                let value = self.eval(expr)?;
+                Ok(Err(Interrupt::Return(value)))
+            }
         }
     }
 
-    pub fn run_declaration(&mut self, s: &ResolvedDeclaration<'src>) -> Result<(), RuntimeError> {
+    // TODO make this private, and add `run_program` that checks that no interrupts are returned
+    pub fn run_declaration(
+        &mut self,
+        s: &ResolvedDeclaration<'src>,
+    ) -> Result<Result<(), Interrupt<'src>>, RuntimeError> {
         match s {
             Declaration::Var(VariableDecl(s), e) => {
                 let v = if let Some(e) = e {
@@ -316,7 +346,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     Value::Atomic(AtomicValue::Nil)
                 };
                 self.env.declare(*s, v);
-                Ok(())
+                Ok(Ok(()))
             }
             Declaration::Statement(stmt) => self.run_statement(stmt),
             Declaration::Function { name, args, body } => {
@@ -326,7 +356,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     env: self.env.stack.clone(),
                 };
                 self.env.declare(name.0, Value::Function(func));
-                Ok(())
+                Ok(Ok(()))
             }
         }
     }
@@ -346,7 +376,7 @@ mod tests {
     }
     impl Deps for TestDeps {
         fn print<'src>(&mut self, v: Value<'src>) {
-            self.printed.push(format!("{v:?}"));
+            self.printed.push(format!("{v}"));
         }
         fn clock(&mut self) -> f64 {
             let time = self.time;
@@ -367,7 +397,7 @@ mod tests {
         let program = parser.parse_program().unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
         for stmt in program.decls {
-            runtime.run_declaration(&stmt).unwrap();
+            runtime.run_declaration(&stmt).unwrap().unwrap();
         }
         runtime.into_deps().printed
     }
@@ -384,7 +414,7 @@ mod tests {
             }
         "#;
         let output = get_output(source);
-        assert_eq!(output, vec!["String(\"hi\")", "Number(4.0)"]);
+        assert_eq!(output, vec!["hi", "4"]);
     }
     #[test]
     fn for_loop() {
@@ -398,10 +428,7 @@ mod tests {
             f();
         "#;
         let output = get_output(source);
-        assert_eq!(
-            output,
-            vec!["Number(1.0)", "Number(3.0)", "Number(5.0)", "Number(7.0)"]
-        );
+        assert_eq!(output, vec!["1", "3", "5", "7"]);
     }
     #[test]
     fn closure() {
@@ -418,7 +445,7 @@ mod tests {
             f();f();f();
         "#;
         let output = get_output(source);
-        assert_eq!(output, vec!["Number(0.0)", "Number(1.0)", "Number(2.0)"]);
+        assert_eq!(output, vec!["0", "1", "2"]);
     }
     #[test]
     fn resolution() {
@@ -434,6 +461,18 @@ mod tests {
             }
         "#;
         let output = get_output(source);
-        assert_eq!(output, vec!["Number(1.0)", "Number(1.0)"]);
+        assert_eq!(output, vec!["1", "1"]);
+    }
+    #[test]
+    fn fn_return_value() {
+        let source = r#"
+            fun f(x, y) {
+                return x+y;
+            }
+            print(f(1, 2));
+            print(f(3, 4));
+        "#;
+        let output = get_output(source);
+        assert_eq!(output, vec!["3", "7"]);
     }
 }

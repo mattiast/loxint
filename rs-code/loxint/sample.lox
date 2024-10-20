@@ -11,18 +11,30 @@ if (b == 4) {
 print a;
 print b+1;
 }
+print("---");
 
 a = 1;
 b = 1;
-while (a < 1000) {
+while (a < 200) {
     print a;
     a = a + b;
     b = a - b;
 }
+print("---");
 
 fun f(x) {
     print x/2;
 }
-for(var i = 0; i<10; i = i+1) {
+for(var i = 0; i<8; i = i+1) {
     f(i+1);
 }
+print("---");
+fun g(x) {
+    if (x < 2) {
+        return x;
+    }
+    else {
+        return g(x-1) + g(x-2);
+    }
+}
+print(g(10));
