@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{
     collections::HashMap,
-    fmt::Debug,
+    fmt::{Debug, Display},
     sync::{Arc, Mutex},
 };
 
@@ -14,12 +14,31 @@ pub enum Value<'src> {
     NativeFunction(NativeFunc),
     Function(LoxFunction<'src>),
 }
+impl Display for Value<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Atomic(v) => write!(f, "{}", v),
+            Value::NativeFunction(nf) => write!(f, "<native func {}>", nf.name()),
+            Value::Function(_) => write!(f, "<func>"),
+        }
+    }
+}
 #[derive(Debug, PartialEq, Clone)]
 pub enum AtomicValue {
     Number(f64),
     Boolean(bool),
     String(String),
     Nil,
+}
+impl Display for AtomicValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AtomicValue::Number(n) => write!(f, "{}", n),
+            AtomicValue::Boolean(b) => write!(f, "{}", b),
+            AtomicValue::String(s) => write!(f, "{}", s),
+            AtomicValue::Nil => write!(f, "nil"),
+        }
+    }
 }
 #[derive(Clone)]
 pub struct LoxFunction<'src> {

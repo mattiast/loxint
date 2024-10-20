@@ -375,7 +375,7 @@ mod tests {
     }
     impl Deps for TestDeps {
         fn print<'src>(&mut self, v: Value<'src>) {
-            self.printed.push(format!("{v:?}"));
+            self.printed.push(format!("{v}"));
         }
         fn clock(&mut self) -> f64 {
             let time = self.time;
@@ -396,7 +396,7 @@ mod tests {
         let program = parser.parse_program().unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
         for stmt in program.decls {
-            runtime.run_declaration(&stmt).unwrap();
+            runtime.run_declaration(&stmt).unwrap().unwrap();
         }
         runtime.into_deps().printed
     }
@@ -413,7 +413,7 @@ mod tests {
             }
         "#;
         let output = get_output(source);
-        assert_eq!(output, vec!["String(\"hi\")", "Number(4.0)"]);
+        assert_eq!(output, vec!["hi", "4"]);
     }
     #[test]
     fn for_loop() {
@@ -427,10 +427,7 @@ mod tests {
             f();
         "#;
         let output = get_output(source);
-        assert_eq!(
-            output,
-            vec!["Number(1.0)", "Number(3.0)", "Number(5.0)", "Number(7.0)"]
-        );
+        assert_eq!(output, vec!["1", "3", "5", "7"]);
     }
     #[test]
     fn closure() {
@@ -447,7 +444,7 @@ mod tests {
             f();f();f();
         "#;
         let output = get_output(source);
-        assert_eq!(output, vec!["Number(0.0)", "Number(1.0)", "Number(2.0)"]);
+        assert_eq!(output, vec!["0", "1", "2"]);
     }
     #[test]
     fn resolution() {
@@ -463,6 +460,18 @@ mod tests {
             }
         "#;
         let output = get_output(source);
-        assert_eq!(output, vec!["Number(1.0)", "Number(1.0)"]);
+        assert_eq!(output, vec!["1", "1"]);
+    }
+    #[test]
+    fn fn_return_value() {
+        let source = r#"
+            fun f(x, y) {
+                return x+y;
+            }
+            print(f(1, 2));
+            print(f(3, 4));
+        "#;
+        let output = get_output(source);
+        assert_eq!(output, vec!["3", "7"]);
     }
 }
