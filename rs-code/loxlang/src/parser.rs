@@ -100,6 +100,10 @@ where
             let e = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
             Ok(Statement::Print(e))
+        } else if self.match_and_consume(Token::Reserved(Reserved::RETURN)) {
+            let e = self.parse_expr()?;
+            self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
+            Ok(Statement::Return(e))
         } else if self.peek() == Some(&Token::Symbol(Symbol::LeftBrace)) {
             self.parse_block()
         } else if self.match_and_consume(Token::Reserved(Reserved::IF)) {
