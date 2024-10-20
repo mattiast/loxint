@@ -26,6 +26,7 @@ pub struct Runtime<'src, Dep: Deps> {
     src: &'src str,
 }
 
+#[derive(Debug)]
 pub enum Interrupt<'src> {
     Return(Value<'src>),
     Break,
@@ -203,7 +204,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                             match res {
                                 Ok(()) => Ok(Value::Atomic(AtomicValue::Nil)),
                                 Err(Interrupt::Return(v)) => Ok(v),
-                                Err(_) => Err(runtime.err("Function body returned an error", span)),
+                                Err(_) => Err(runtime.err("Not in a loop", span)),
                             }
                         });
                         self.env.stack = old_stack;
@@ -311,10 +312,13 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                         };
                         // If the condition is false, end the loop
                         if !cond_val {
-                            return Ok(());
+                            return Ok(Ok(()));
                         }
                         // Evaluate the body
-                        runtime.run_statement(body)?;
+                        let res = runtime.run_statement(body)?;
+                        if let Err(i) = res {
+                            return Ok(Err(i));
+                        }
                         // Evaluate the increment
                         if let Some(ref inc) = loopdef.increment {
                             runtime.eval(inc)?;
@@ -322,7 +326,10 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     }
                 })
             }
-            Statement::Return(annotated) => todo!(),
+            Statement::Return(expr) => {
+                let value = self.eval(expr)?;
+                Ok(Err(Interrupt::Return(value)))
+            }
         }
     }
 
