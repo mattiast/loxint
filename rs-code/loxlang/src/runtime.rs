@@ -333,6 +333,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
         }
     }
 
+    // TODO make this private, and add `run_program` that checks that no interrupts are returned
     pub fn run_declaration(
         &mut self,
         s: &ResolvedDeclaration<'src>,

@@ -170,7 +170,7 @@ pub trait Deps {
 pub struct DefaultDeps;
 impl Deps for DefaultDeps {
     fn print(&mut self, value: Value) {
-        println!("{:?}", value);
+        println!("{}", value);
     }
     fn clock(&mut self) -> f64 {
         use std::time::{SystemTime, UNIX_EPOCH};
