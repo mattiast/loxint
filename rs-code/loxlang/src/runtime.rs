@@ -26,6 +26,12 @@ pub struct Runtime<'src, Dep: Deps> {
     src: &'src str,
 }
 
+pub enum Interrupt<'src> {
+    Return(Value<'src>),
+    Break,
+    Continue,
+}
+
 impl<'src, Dep: Deps> Runtime<'src, Dep> {
     pub fn new(src: &'src str, env: ExecEnv<'src, Dep>) -> Self {
         Runtime { env, src }
@@ -193,10 +199,12 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                             {
                                 runtime.env.declare(*arg_name, arg_value);
                             }
-                            runtime.run_statement(&f.body)?;
-                            // TODO return values
-                            // Should run_statement take a Continuation as a parameter??
-                            Ok(Value::Atomic(AtomicValue::Nil))
+                            let res = runtime.run_statement(&f.body)?;
+                            match res {
+                                Ok(()) => Ok(Value::Atomic(AtomicValue::Nil)),
+                                Err(Interrupt::Return(v)) => Ok(v),
+                                Err(_) => Err(runtime.err("Function body returned an error", span)),
+                            }
                         });
                         self.env.stack = old_stack;
                         result
@@ -214,22 +222,29 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
         }
     }
 
-    pub fn run_statement(&mut self, s: &ResolvedStatement<'src>) -> Result<(), RuntimeError> {
+    // Continuation to handle return value
+    fn run_statement(
+        &mut self,
+        s: &ResolvedStatement<'src>,
+    ) -> Result<Result<(), Interrupt<'src>>, RuntimeError> {
         match s {
             Statement::Expression(e) => {
                 let _ = self.eval(e)?;
-                Ok(())
+                Ok(Ok(()))
             }
             Statement::Print(e) => {
                 let v = self.eval(e)?;
                 self.env.print(v);
-                Ok(())
+                Ok(Ok(()))
             }
             Statement::Block(decls) => self.run_in_substack(|runtime| {
                 for d in decls {
-                    runtime.run_declaration(d)?;
+                    let res = runtime.run_declaration(d)?;
+                    if let Err(i) = res {
+                        return Ok(Err(i));
+                    }
                 }
-                Ok(())
+                Ok(Ok(()))
             }),
             Statement::If(cond, stmt_then, stmt_else) => {
                 let span = cond.annotation;
@@ -242,7 +257,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                             if let Some(stmt_else) = stmt_else {
                                 self.run_statement(stmt_else)
                             } else {
-                                Ok(())
+                                Ok(Ok(()))
                             }
                         }
                     }
@@ -255,9 +270,12 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                 match cond_val {
                     Value::Atomic(AtomicValue::Boolean(b)) => {
                         if b {
-                            self.run_statement(body)?
+                            let res = self.run_statement(body)?;
+                            if let Err(i) = res {
+                                return Ok(Err(i));
+                            }
                         } else {
-                            return Ok(());
+                            return Ok(Ok(()));
                         }
                     }
                     _ => {
@@ -304,10 +322,14 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     }
                 })
             }
+            Statement::Return(annotated) => todo!(),
         }
     }
 
-    pub fn run_declaration(&mut self, s: &ResolvedDeclaration<'src>) -> Result<(), RuntimeError> {
+    pub fn run_declaration(
+        &mut self,
+        s: &ResolvedDeclaration<'src>,
+    ) -> Result<Result<(), Interrupt<'src>>, RuntimeError> {
         match s {
             Declaration::Var(VariableDecl(s), e) => {
                 let v = if let Some(e) = e {
@@ -316,7 +338,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     Value::Atomic(AtomicValue::Nil)
                 };
                 self.env.declare(*s, v);
-                Ok(())
+                Ok(Ok(()))
             }
             Declaration::Statement(stmt) => self.run_statement(stmt),
             Declaration::Function { name, args, body } => {
@@ -326,7 +348,7 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     env: self.env.stack.clone(),
                 };
                 self.env.declare(name.0, Value::Function(func));
-                Ok(())
+                Ok(Ok(()))
             }
         }
     }

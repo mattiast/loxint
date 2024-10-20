@@ -42,7 +42,7 @@ pub enum Statement<'a, VR, VD, Ann> {
         Box<Statement<'a, VR, VD, Ann>>,
     ),
     For(ForLoopDef<'a, VR, VD, Ann>, Box<Statement<'a, VR, VD, Ann>>),
-    // Return(Expression<'a>),
+    Return(AnnotatedExpression<'a, VR, Ann>),
 }
 /// Combination of `var_name` and `start` has 4 cases:
 /// 1. var_name is Some and start is Some: this is `var x = 0;` case, the most typical one
