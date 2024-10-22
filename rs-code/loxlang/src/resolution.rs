@@ -61,7 +61,7 @@ pub fn resolve_expr_no_var<'src>(
     return resolver.resolve_expr(x);
 }
 
-struct Resolver<'src> {
+pub struct Resolver<'src> {
     // TODO how about `clock`, it needs some default mapping or such
     scopes: Vec<HashMap<&'src str, VarId>>,
     next_id: VarId,
@@ -69,6 +69,17 @@ struct Resolver<'src> {
 }
 
 impl<'src> Resolver<'src> {
+    pub fn new(src: &'src str) -> Self {
+        Resolver {
+            scopes: vec![NativeFunc::iter()
+                .enumerate()
+                .map(|(i, nf)| (nf.name(), i as u64))
+                .collect()],
+
+            next_id: NativeFunc::count() as u64,
+            src,
+        }
+    }
     fn find_variable(&self, name: &'src str) -> Option<VResolution> {
         self.scopes
             .iter()
@@ -171,7 +182,7 @@ impl<'src> Resolver<'src> {
             Statement::Return(expr) => self.resolve_expr(expr).map(Statement::Return),
         }
     }
-    fn resolve_declaration(
+    pub fn resolve_declaration(
         &mut self,
         x: ParsedDeclaration<'src>,
     ) -> Result<ResolvedDeclaration<'src>, ResolutionError> {

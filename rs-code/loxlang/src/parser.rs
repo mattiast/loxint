@@ -187,7 +187,7 @@ where
         }
         Ok(Program { decls })
     }
-    fn parse_declaration(&mut self) -> Result<ParsedDeclaration<'src>, ParseError> {
+    pub fn parse_declaration(&mut self) -> Result<ParsedDeclaration<'src>, ParseError> {
         if self.match_and_consume(Token::Reserved(Reserved::VAR)) {
             let name = self.parse_identifier()?;
             let value = if self.match_and_consume(Token::Symbol(Symbol::EQUAL)) {
