@@ -61,9 +61,7 @@ pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
     };
     let env = loxlang::execution_env::ExecEnv::new(deps);
     let mut runtime = loxlang::runtime::Runtime::new(&src, env);
-    for stmt in program.decls {
-        runtime.run_declaration(&stmt)?;
-    }
+    runtime.run_program(&program)?;
     Ok(runtime.into_deps().printed)
 }
 

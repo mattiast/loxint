@@ -42,9 +42,7 @@ fn main() -> Result<()> {
             let program = loxlang::parse_program(&source)?;
             let env = loxlang::execution_env::ExecEnv::new_default();
             let mut runtime = loxlang::runtime::Runtime::new(&source, env);
-            for stmt in program.decls {
-                runtime.run_declaration(&stmt)?;
-            }
+            runtime.run_program(&program)?;
             Ok(())
         }
         Commands::Repl { debug } => {
