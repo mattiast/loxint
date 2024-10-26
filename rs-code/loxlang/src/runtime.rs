@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::execution_env::{AtomicValue, Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
-use crate::parser::ByteSpan;
+use crate::parse::ByteSpan;
 use crate::resolution::{ResolvedDeclaration, ResolvedExpression, ResolvedStatement};
 use crate::syntax::{
     BOperator, Declaration, Expression, Statement, UOperator, Variable, VariableDecl,
@@ -324,8 +324,8 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
 mod tests {
     use crate::execution_env::Deps;
     use crate::execution_env::ExecEnv;
-    use crate::parser;
-    use crate::scanner::parse_tokens;
+    use crate::parse;
+    use crate::parse::scanner::parse_tokens;
 
     use super::*;
     struct TestDeps {
@@ -351,7 +351,7 @@ mod tests {
         let env = ExecEnv::new(deps);
         let mut runtime = Runtime::new(source, env);
         let tokens = parse_tokens(source).unwrap();
-        let parser = parser::Parser::new(source, &tokens);
+        let parser = parse::Parser::new(source, &tokens);
         let program = parser.parse_program().unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
         for stmt in program.decls {

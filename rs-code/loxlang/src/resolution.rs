@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{
     execution_env::NativeFunc,
-    parser::{ByteSpan, ParsedDeclaration, ParsedExpression, ParsedProgram, ParsedStatement},
+    parse::{ByteSpan, ParsedDeclaration, ParsedExpression, ParsedProgram, ParsedStatement},
     syntax::{
         AnnotatedExpression, Declaration, Expression, Program, Statement, Variable, VariableDecl,
     },

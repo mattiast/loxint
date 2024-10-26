@@ -1,10 +1,9 @@
 use loxlang::execution_env::AtomicValue;
 use loxlang::execution_env::Deps;
 use loxlang::execution_env::Value;
-use loxlang::parser;
+use loxlang::parse;
 use loxlang::resolution::resolve;
 use loxlang::resolution::resolve_expr_no_var;
-use loxlang::scanner;
 use miette::Diagnostic;
 use miette::NarratableReportHandler;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -31,8 +30,8 @@ impl<T: Diagnostic> From<T> for LoxError {
 
 #[wasm_bindgen]
 pub fn eval_expr(src: String) -> Result<f64, LoxError> {
-    let tokens = scanner::parse_tokens(&src)?;
-    let mut p = parser::Parser::new(&src, &tokens);
+    let tokens = parse::scanner::parse_tokens(&src)?;
+    let mut p = parse::Parser::new(&src, &tokens);
     let e = p.parse_expr()?;
     let e = resolve_expr_no_var(e, &src)?;
     if !p.done() {
@@ -54,8 +53,8 @@ pub fn eval_expr(src: String) -> Result<f64, LoxError> {
 
 #[wasm_bindgen]
 pub fn run_program(src: String) -> Result<Vec<String>, LoxError> {
-    let tokens = scanner::parse_tokens(&src)?;
-    let program = parser::Parser::new(&src, &tokens).parse_program()?;
+    let tokens = parse::scanner::parse_tokens(&src)?;
+    let program = parse::Parser::new(&src, &tokens).parse_program()?;
     let program = resolve(program, &src)?;
     let deps = TestDeps {
         printed: Vec::new(),

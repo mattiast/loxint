@@ -1,15 +1,14 @@
+pub mod scanner;
 use std::ops::{self, Range};
 
 use miette::{Diagnostic, SourceOffset};
 use thiserror::Error;
 
-use crate::{
-    scanner::{Reserved, Symbol, Token},
-    syntax::{
-        AnnotatedExpression, BOperator, Declaration, Expression, Program, Statement, UOperator,
-        Variable, VariableDecl,
-    },
+use crate::syntax::{
+    AnnotatedExpression, BOperator, Declaration, Expression, Program, Statement, UOperator,
+    Variable, VariableDecl,
 };
+use scanner::{Reserved, Symbol, Token};
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ParseError {

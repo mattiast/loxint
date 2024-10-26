@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
-use loxlang::parser;
-use loxlang::resolution::{resolve_expr_no_var, Resolver};
-use loxlang::scanner::parse_tokens;
+use loxlang::parse;
+use loxlang::parse::scanner::parse_tokens;
+use loxlang::resolution::Resolver;
 use loxlang::syntax::{Declaration, Statement};
 use miette::Result;
 use std::io::Write;
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
                 // itself, and the string we have won't life long enough.
                 let s: &'static str = Box::leak(input.into_boxed_str());
                 let tokens = parse_tokens(&s)?;
-                let mut p = parser::Parser::new(&s, &tokens);
+                let mut p = parse::Parser::new(&s, &tokens);
 
                 // NOTE: for expression, you need a semicolon at the end
                 let decl = p.parse_declaration()?;
