@@ -41,7 +41,7 @@ fn main() -> Result<()> {
             // parse a program from source
             let program = loxlang::parse_program(&source)?;
             let env = loxlang::execution_env::ExecEnv::new_default();
-            let mut runtime = loxlang::runtime::Runtime::new(&source, env);
+            let mut runtime = loxlang::runtime::Runtime::new(env);
             runtime
                 .run_program(&program)
                 .map_err(|err| miette::Error::from(err).with_source_code(source))?;
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         }
         Commands::Repl { debug } => {
             let env = loxlang::execution_env::ExecEnv::new_default();
-            let mut runtime = loxlang::runtime::Runtime::new("", env);
+            let mut runtime = loxlang::runtime::Runtime::new(env);
             let mut resolver = Resolver::new("");
             loop {
                 print!("> ");

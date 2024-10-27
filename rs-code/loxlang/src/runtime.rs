@@ -16,8 +16,6 @@ use crate::syntax::{
 #[derive(Error, Debug, Diagnostic)]
 #[error("runtime_error")]
 pub struct RuntimeError {
-    #[source_code]
-    pub src: String,
     #[label("Something wrong here")]
     pub source_offset: miette::SourceSpan,
     #[help]
@@ -26,7 +24,6 @@ pub struct RuntimeError {
 
 pub struct Runtime<'src, Dep: Deps> {
     env: ExecEnv<'src, Dep>,
-    src: &'src str,
 }
 
 #[derive(Debug)]
@@ -37,8 +34,8 @@ pub enum Interrupt<'src> {
 }
 
 impl<'src, Dep: Deps> Runtime<'src, Dep> {
-    pub fn new(src: &'src str, env: ExecEnv<'src, Dep>) -> Self {
-        Runtime { env, src }
+    pub fn new(env: ExecEnv<'src, Dep>) -> Self {
+        Runtime { env }
     }
     pub fn into_deps(self) -> Dep {
         self.env.into_deps()
@@ -47,7 +44,6 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
         RuntimeError {
             source_offset: span.into(),
             msg,
-            src: self.src.to_owned(),
         }
     }
 
@@ -373,7 +369,7 @@ mod tests {
             time: 0.0,
         };
         let env = ExecEnv::new(deps);
-        let mut runtime = Runtime::new(source, env);
+        let mut runtime = Runtime::new(env);
         let tokens = parse_tokens(source).unwrap();
         let parser = parse::Parser::new(source, &tokens);
         let program = parser.parse_program().unwrap();
