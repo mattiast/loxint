@@ -265,25 +265,29 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
                     _ => Err(self.err("Condition value not a boolean", span)),
                 }
             }
-            Statement::While(cond, body) => loop {
-                let span = cond.annotation;
-                let cond_val = self.eval(cond)?;
-                match cond_val {
-                    Value::Atomic(AtomicValue::Boolean(b)) => {
-                        if b {
-                            let res = self.run_statement(body)?;
-                            if let Err(i) = res {
-                                return Ok(Err(i));
+            Statement::While(cond, body) => {
+                // This is a loop
+                loop {
+                    let cond_val = self.eval(cond)?;
+                    match cond_val {
+                        Value::Atomic(AtomicValue::Boolean(b)) => {
+                            if b {
+                                let res = self.run_statement(body)?;
+                                match res {
+                                    Ok(()) | Err(Interrupt::Continue) => {}
+                                    Err(Interrupt::Break) => return Ok(Ok(())),
+                                    Err(i) => return Ok(Err(i)), // This is a "return interrupt"
+                                }
+                            } else {
+                                return Ok(Ok(()));
                             }
-                        } else {
-                            return Ok(Ok(()));
+                        }
+                        _ => {
+                            return Err(self.err("Condition value not a boolean", cond.annotation));
                         }
                     }
-                    _ => {
-                        return Err(self.err("Condition value not a boolean", span));
-                    }
                 }
-            },
+            }
             Statement::Return(expr) => {
                 let value = self.eval(expr)?;
                 Ok(Err(Interrupt::Return(value)))
