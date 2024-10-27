@@ -20,6 +20,7 @@ pub struct RuntimeError {
     pub src: String,
     #[label("Something wrong here")]
     pub source_offset: miette::SourceSpan,
+    #[help]
     pub msg: &'static str,
 }
 
@@ -230,9 +231,10 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
         &mut self,
         s: &ResolvedStatement<'src>,
     ) -> Result<Result<(), Interrupt<'src>>, RuntimeError> {
-        match s {
+        let _span = s.annotation; // TODO is this even needed??
+        match &s.value {
             Statement::Expression(e) => {
-                let _ = self.eval(e)?;
+                let _ = self.eval(&e)?;
                 Ok(Ok(()))
             }
             Statement::Print(e) => {

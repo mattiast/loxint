@@ -5,8 +5,8 @@ use miette::{Diagnostic, SourceOffset};
 use thiserror::Error;
 
 use crate::syntax::{
-    AnnotatedExpression, BOperator, Declaration, Expression, Program, Statement, UOperator,
-    Variable, VariableDecl,
+    AnnotatedExpression, AnnotatedStatement, BOperator, Declaration, Expression, Program,
+    Statement, UOperator, Variable, VariableDecl,
 };
 use scanner::{Reserved, Symbol, Token};
 
@@ -42,6 +42,14 @@ impl ByteSpan {
         self.end - self.start
     }
 }
+impl From<Range<usize>> for ByteSpan {
+    fn from(value: Range<usize>) -> Self {
+        ByteSpan {
+            start: value.start,
+            end: value.end,
+        }
+    }
+}
 impl ops::BitOr<ByteSpan> for ByteSpan {
     type Output = ByteSpan;
 
@@ -58,7 +66,7 @@ impl From<ByteSpan> for miette::SourceSpan {
     }
 }
 pub type ParsedExpression<'src> = AnnotatedExpression<'src, &'src str, ByteSpan>;
-pub type ParsedStatement<'src> = Statement<'src, &'src str, &'src str, ByteSpan>;
+pub type ParsedStatement<'src> = AnnotatedStatement<'src, &'src str, &'src str, ByteSpan>;
 pub type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str, ByteSpan>;
 pub type ParsedProgram<'src> = Program<'src, &'src str, &'src str, ByteSpan>;
 
@@ -95,45 +103,45 @@ where
         }
     }
     fn parse_statement(&mut self) -> Result<ParsedStatement<'src>, ParseError> {
-        if self.match_and_consume(Token::Reserved(Reserved::PRINT)) {
+        if let Some(span1) = self.match_and_konsume(&Token::Reserved(Reserved::PRINT)) {
             let e = self.parse_expr()?;
-            self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
-            Ok(Statement::Print(e))
-        } else if self.match_and_consume(Token::Reserved(Reserved::RETURN)) {
+            let span2 = self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
+            Ok(Statement::Print(e).annotate(span1 | span2))
+        } else if let Some(span1) = self.match_and_konsume(&Token::Reserved(Reserved::RETURN)) {
             let e = self.parse_expr()?;
-            self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
-            Ok(Statement::Return(e))
+            let span2 = self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
+            Ok(Statement::Return(e).annotate(span1 | span2))
         } else if self.peek() == Some(&Token::Symbol(Symbol::LeftBrace)) {
             self.parse_block()
-        } else if self.match_and_consume(Token::Reserved(Reserved::IF)) {
+        } else if let Some(span1) = self.match_and_konsume(&Token::Reserved(Reserved::IF)) {
             self.consume(&Token::Symbol(Symbol::LeftParen))?;
             let e = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::RightParen))?;
             let then_stmt = self.parse_statement()?;
             if self.match_and_consume(Token::Reserved(Reserved::ELSE)) {
                 let else_stmt = self.parse_statement()?;
-                Ok(Statement::If(
-                    e,
-                    Box::new(then_stmt),
-                    Some(Box::new(else_stmt)),
-                ))
+                let span = span1 | else_stmt.annotation;
+                Ok(Statement::If(e, Box::new(then_stmt), Some(Box::new(else_stmt))).annotate(span))
             } else {
-                Ok(Statement::If(e, Box::new(then_stmt), None))
+                let span = span1 | then_stmt.annotation;
+                Ok(Statement::If(e, Box::new(then_stmt), None).annotate(span))
             }
-        } else if self.match_and_consume(Token::Reserved(Reserved::WHILE)) {
+        } else if let Some(span1) = self.match_and_konsume(&Token::Reserved(Reserved::WHILE)) {
             self.consume(&Token::Symbol(Symbol::LeftParen))?;
             let cond = self.parse_expr()?;
             self.consume(&Token::Symbol(Symbol::RightParen))?;
             let body = self.parse_statement()?;
-            Ok(Statement::While(cond, Box::new(body)))
+            let span = span1 | body.annotation;
+            Ok(Statement::While(cond, Box::new(body)).annotate(span))
         } else if self.match_and_consume(Token::Reserved(Reserved::FOR)) {
             let loopdef = self.parse_for_loop_line()?;
             let body = self.parse_statement()?;
             Ok(for_loop_into_while_loop(loopdef, body))
         } else {
             let e = self.parse_expr()?;
-            self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
-            Ok(Statement::Expression(e))
+            let span2 = self.consume(&Token::Symbol(Symbol::SEMICOLON))?;
+            let span = e.annotation | span2;
+            Ok(Statement::Expression(e).annotate(span))
         }
     }
     /// This will match the `(var a = 1; a < 10; a = a + 1)` part of a for loop
@@ -225,12 +233,14 @@ where
         }
     }
     fn parse_block(&mut self) -> Result<ParsedStatement<'src>, ParseError> {
-        self.consume(&Token::Symbol(Symbol::LeftBrace))?;
+        let span1: ByteSpan = self.consume(&Token::Symbol(Symbol::LeftBrace))?;
         let mut decls = Vec::new();
-        while !self.match_and_consume(Token::Symbol(Symbol::RightBrace)) {
+        loop {
+            if let Some(span2) = self.match_and_konsume(&Token::Symbol(Symbol::RightBrace)) {
+                return Ok(Statement::Block(decls).annotate(span1 | span2));
+            }
             decls.push(self.parse_declaration()?);
         }
-        Ok(Statement::Block(decls))
     }
     fn peek(&self) -> Option<&Token<'src>> {
         self.remaining.first().map(|x| &x.0)
@@ -309,10 +319,7 @@ where
                 span: self.src.len().into(),
                 help: "Expected parentheses, identifier or literal".to_owned(),
             })?;
-        let span = ByteSpan {
-            start: range.start,
-            end: range.end,
-        };
+        let span = range.clone().into();
         match token {
             Token::Symbol(Symbol::LeftParen) => self.parse_grouping(),
             Token::Identifier(id) => {
@@ -344,23 +351,23 @@ where
     }
 
     fn parse_unary(&mut self) -> Result<ParsedExpression<'src>, ParseError> {
-        let operator = if self.match_and_consume(Token::Symbol(Symbol::MINUS)) {
-            Some(UOperator::MINUS)
-        } else if self.match_and_consume(Token::Symbol(Symbol::BANG)) {
-            Some(UOperator::BANG)
+        let x = if let Some(span1) = self.match_and_konsume(&Token::Symbol(Symbol::MINUS)) {
+            Some((UOperator::MINUS, span1))
+        } else if let Some(span1) = self.match_and_konsume(&Token::Symbol(Symbol::BANG)) {
+            Some((UOperator::BANG, span1))
         } else {
             None
         };
-        match operator {
+        match x {
             None => self.parse_call(),
-            Some(operator) => {
+            Some((operator, span1)) => {
                 let right = self.parse_unary()?;
                 let ann = right.annotation;
                 Ok(Expression::Unary {
                     operator,
                     right: Box::new(right),
                 }
-                .annotate(ann))
+                .annotate(span1 | ann))
             }
         }
     }
@@ -370,10 +377,11 @@ where
         let mut ann = expr.annotation;
         while self.match_and_consume(Token::Symbol(Symbol::LeftParen)) {
             let mut args = vec![];
-            if !self.match_and_consume(Token::Symbol(Symbol::RightParen)) {
+            if let Some(span2) = self.match_and_konsume(&Token::Symbol(Symbol::RightParen)) {
+                ann = ann | span2;
+            } else {
                 loop {
                     let e = self.parse_expr()?;
-                    ann = ann | e.annotation;
                     args.push(e);
                     if !self.match_and_consume(Token::Symbol(Symbol::COMMA)) {
                         break;
@@ -382,7 +390,8 @@ where
                         return Err(self.error("too many arguments"));
                     }
                 }
-                self.consume(&Token::Symbol(Symbol::RightParen))?;
+                let span2 = self.consume(&Token::Symbol(Symbol::RightParen))?;
+                ann = ann | span2;
             }
             expr = Expression::FunctionCall(Box::new(expr), args).annotate(ann);
         }
@@ -528,14 +537,9 @@ where
             None => Err(self.error("end of input")),
         }
     }
-    fn consume(&mut self, string: &Token<'src>) -> Result<(), ParseError> {
-        let x = self.peek() == Some(string);
-        if !x {
-            Err(self.error(&format!("expected another token {:?}", string)))
-        } else {
-            self.remaining = &self.remaining[1..];
-            Ok(())
-        }
+    fn consume(&mut self, token: &Token<'src>) -> Result<ByteSpan, ParseError> {
+        self.match_and_konsume(token)
+            .ok_or_else(|| self.error(&format!("expected another token ...  {:?}", token)))
     }
     fn match_and_consume(&mut self, token: Token<'src>) -> bool {
         let is_match = self.peek() == Some(&token);
@@ -543,6 +547,15 @@ where
             self.remaining = &self.remaining[1..];
         }
         is_match
+    }
+    fn match_and_konsume(&mut self, token: &Token<'src>) -> Option<ByteSpan> {
+        self.remaining
+            .first()
+            .filter(|(t, _)| t == token)
+            .map(|(_, r)| {
+                self.remaining = &self.remaining[1..];
+                r.clone().into()
+            })
     }
 }
 /// Combination of `var_name` and `start` has 4 cases:
@@ -590,10 +603,10 @@ fn for_loop_into_while_loop<'src>(
     */
     let init_decl: Option<ParsedDeclaration<'src>> = match loopdef.var_name {
         Some(var_decl) => Some(Declaration::Var(var_decl, loopdef.start)),
-        None => loopdef
-            .start
-            .map(Statement::Expression)
-            .map(Declaration::Statement),
+        None => loopdef.start.map(|e| {
+            let span = e.annotation;
+            Declaration::Statement(Statement::Expression(e).annotate(span))
+        }),
     };
     let cond = if let Some(cond) = loopdef.cond {
         cond
@@ -607,18 +620,29 @@ fn for_loop_into_while_loop<'src>(
     if let Some(decl) = init_decl {
         decls.push(decl);
     }
-    decls.push(Declaration::Statement(Statement::While(
-        cond,
-        Box::new(Statement::Block({
-            let mut while_body = Vec::new();
-            while_body.push(Declaration::Statement(body));
-            if let Some(incr) = loopdef.increment {
-                while_body.push(Declaration::Statement(Statement::Expression(incr)));
-            }
-            while_body
-        })),
-    )));
-    Statement::Block(decls)
+    let body_span = body.annotation;
+    let span = body_span; // TODO find full span of the for loop
+    decls.push(Declaration::Statement(
+        Statement::While(
+            cond,
+            Box::new(
+                Statement::Block({
+                    let mut while_body = Vec::new();
+                    while_body.push(Declaration::Statement(body));
+                    if let Some(incr) = loopdef.increment {
+                        let span = incr.annotation;
+                        while_body.push(Declaration::Statement(
+                            Statement::Expression(incr).annotate(span),
+                        ));
+                    }
+                    while_body
+                })
+                .annotate(body_span),
+            ),
+        )
+        .annotate(span),
+    ));
+    Statement::Block(decls).annotate(span)
 }
 
 // tests

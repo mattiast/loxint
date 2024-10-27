@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use loxlang::parse;
 use loxlang::parse::scanner::parse_tokens;
 use loxlang::resolution::Resolver;
-use loxlang::syntax::{Declaration, Statement};
+use loxlang::syntax::{Annotated, Declaration, Statement};
 use miette::Result;
 use std::io::Write;
 use std::path::PathBuf;
@@ -42,7 +42,9 @@ fn main() -> Result<()> {
             let program = loxlang::parse_program(&source)?;
             let env = loxlang::execution_env::ExecEnv::new_default();
             let mut runtime = loxlang::runtime::Runtime::new(&source, env);
-            runtime.run_program(&program)?;
+            runtime
+                .run_program(&program)
+                .map_err(|err| miette::Error::from(err).with_source_code(source))?;
             Ok(())
         }
         Commands::Repl { debug } => {
@@ -75,12 +77,21 @@ fn main() -> Result<()> {
                     println!("Input expression: {:?}", decl);
                 }
                 match decl {
-                    Declaration::Statement(Statement::Expression(e)) => {
-                        println!("{}", runtime.eval(&e)?);
+                    Declaration::Statement(Annotated {
+                        value: Statement::Expression(e),
+                        annotation: _,
+                    }) => {
+                        println!(
+                            "{}",
+                            runtime
+                                .eval(&e)
+                                .map_err(|err| miette::Error::from(err).with_source_code(s))?
+                        );
                     }
                     decl => {
                         let res = runtime.run_declaration(&decl)?;
                         if let Err(_i) = res {
+                            // TODO can we get the span of the interrupt?
                             miette::bail!("bad return/break/continue");
                         }
                     }
