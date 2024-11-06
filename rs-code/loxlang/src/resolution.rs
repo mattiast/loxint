@@ -152,7 +152,7 @@ impl<'src> Resolver<'src> {
     fn resolve_statement(
         &mut self,
         stmt: ParsedStatement<'src>,
-    ) -> Result<AnnotatedStatement<'src, VResolution, VarId, ByteSpan>, ResolutionError> {
+    ) -> Result<ResolvedStatement<'src>, ResolutionError> {
         let ann = stmt.annotation;
         match stmt.value {
             Statement::Expression(e) => self
