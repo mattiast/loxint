@@ -225,6 +225,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "loxvm"
+version = "0.1.0"
+dependencies = [
+ "loxlang",
+]
+
+[[package]]
 name = "loxwasm"
 version = "0.1.0"
 dependencies = [

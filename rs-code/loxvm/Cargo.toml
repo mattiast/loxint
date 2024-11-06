@@ -1,0 +1,7 @@
+[package]
+name = "loxvm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+loxlang = { path = "../loxlang" }
