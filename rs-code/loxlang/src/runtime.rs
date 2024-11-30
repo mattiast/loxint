@@ -5,8 +5,10 @@ use thiserror::Error;
 
 use crate::execution_env::{AtomicValue, Deps, ExecEnv, LoxFunction, NativeFunc, NotFound, Value};
 
-use crate::parser::ByteSpan;
-use crate::resolution::{ResolvedDeclaration, ResolvedExpression, ResolvedStatement};
+use crate::parse::ByteSpan;
+use crate::resolution::{
+    ResolvedDeclaration, ResolvedExpression, ResolvedProgram, ResolvedStatement,
+};
 use crate::syntax::{
     BOperator, Declaration, Expression, Statement, UOperator, Variable, VariableDecl,
 };
@@ -291,7 +293,6 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
         }
     }
 
-    // TODO make this private, and add `run_program` that checks that no interrupts are returned
     pub fn run_declaration(
         &mut self,
         s: &ResolvedDeclaration<'src>,
@@ -318,14 +319,35 @@ impl<'src, Dep: Deps> Runtime<'src, Dep> {
             }
         }
     }
+    pub fn run_program(&mut self, program: &ResolvedProgram<'src>) -> Result<(), RuntimeError> {
+        for stmt in &program.decls {
+            if let Err(i) = self.run_declaration(stmt)? {
+                return Err(match i {
+                    Interrupt::Return(_) => self.err(
+                        "return outside a function",
+                        ByteSpan { start: 0, end: 0 }, // TODO
+                    ),
+                    Interrupt::Break => self.err(
+                        "break outside a loop",
+                        ByteSpan { start: 0, end: 0 }, // TODO
+                    ),
+                    Interrupt::Continue => self.err(
+                        "continue outside a loop",
+                        ByteSpan { start: 0, end: 0 }, // TODO
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::execution_env::Deps;
     use crate::execution_env::ExecEnv;
-    use crate::parser;
-    use crate::scanner::parse_tokens;
+    use crate::parse;
+    use crate::parse::scanner::parse_tokens;
 
     use super::*;
     struct TestDeps {
@@ -351,7 +373,7 @@ mod tests {
         let env = ExecEnv::new(deps);
         let mut runtime = Runtime::new(source, env);
         let tokens = parse_tokens(source).unwrap();
-        let parser = parser::Parser::new(source, &tokens);
+        let parser = parse::Parser::new(source, &tokens);
         let program = parser.parse_program().unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
         for stmt in program.decls {

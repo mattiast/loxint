@@ -1,15 +1,14 @@
+pub mod scanner;
 use std::ops::{self, Range};
 
 use miette::{Diagnostic, SourceOffset};
 use thiserror::Error;
 
-use crate::{
-    scanner::{Reserved, Symbol, Token},
-    syntax::{
-        AnnotatedExpression, BOperator, Declaration, Expression, Program, Statement, UOperator,
-        Variable, VariableDecl,
-    },
+use crate::syntax::{
+    AnnotatedExpression, BOperator, Declaration, Expression, Program, Statement, UOperator,
+    Variable, VariableDecl,
 };
+use scanner::{Reserved, Symbol, Token};
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ParseError {
@@ -187,7 +186,7 @@ where
         }
         Ok(Program { decls })
     }
-    fn parse_declaration(&mut self) -> Result<ParsedDeclaration<'src>, ParseError> {
+    pub fn parse_declaration(&mut self) -> Result<ParsedDeclaration<'src>, ParseError> {
         if self.match_and_consume(Token::Reserved(Reserved::VAR)) {
             let name = self.parse_identifier()?;
             let value = if self.match_and_consume(Token::Symbol(Symbol::EQUAL)) {
