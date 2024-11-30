@@ -110,6 +110,7 @@ struct Node<'src> {
 impl<'src> Stack<'src> {
     pub fn new() -> Self {
         let mut global_env = StackFrame::new();
+        // Hidden coupling NATIVE_FUNC_VAR_IDS
         for (i, func) in NativeFunc::iter().enumerate() {
             global_env.set(i as u64, Value::NativeFunction(func));
         }
