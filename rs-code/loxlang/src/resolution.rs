@@ -7,7 +7,8 @@ use crate::{
     execution_env::NativeFunc,
     parse::{ByteSpan, ParsedDeclaration, ParsedExpression, ParsedProgram, ParsedStatement},
     syntax::{
-        AnnotatedExpression, Declaration, Expression, Program, Statement, Variable, VariableDecl,
+        AnnotatedExpression, AnnotatedStatement, Declaration, Expression, Program, Statement,
+        Variable, VariableDecl,
     },
 };
 
@@ -18,7 +19,7 @@ pub type VarId = u64;
 pub type VResolution = (VarId, usize);
 
 pub type ResolvedExpression<'src> = AnnotatedExpression<'src, VResolution, ByteSpan>;
-pub type ResolvedStatement<'src> = Statement<'src, VResolution, VarId, ByteSpan>;
+pub type ResolvedStatement<'src> = AnnotatedStatement<'src, VResolution, VarId, ByteSpan>;
 pub type ResolvedDeclaration<'src> = Declaration<'src, VResolution, VarId, ByteSpan>;
 pub type ResolvedProgram<'src> = Program<'src, VResolution, VarId, ByteSpan>;
 
@@ -130,16 +131,13 @@ impl<'src> Resolver<'src> {
                 right: Box::new(self.resolve_expr(*right)?),
             }
             .annotate(ann)),
-            Expression::FunctionCall(f, args) => {
-                let ann = f.annotation;
-                Ok(Expression::FunctionCall(
-                    Box::new(self.resolve_expr(*f)?),
-                    args.into_iter()
-                        .map(|a| Ok(self.resolve_expr(a)?))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
-                .annotate(ann))
-            }
+            Expression::FunctionCall(f, args) => Ok(Expression::FunctionCall(
+                Box::new(self.resolve_expr(*f)?),
+                args.into_iter()
+                    .map(|a| Ok(self.resolve_expr(a)?))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )
+            .annotate(ann)),
             Expression::Assignment(Variable(v), e) => {
                 let r = self.find_variable(v).ok_or_else(|| self.error(v))?;
                 let e = self.resolve_expr(*e)?;
@@ -153,21 +151,26 @@ impl<'src> Resolver<'src> {
     }
     fn resolve_statement(
         &mut self,
-        x: ParsedStatement<'src>,
-    ) -> Result<Statement<'src, VResolution, VarId, ByteSpan>, ResolutionError> {
-        match x {
-            Statement::Expression(e) => self.resolve_expr(e).map(Statement::Expression),
-            Statement::Print(e) => self.resolve_expr(e).map(Statement::Print),
+        stmt: ParsedStatement<'src>,
+    ) -> Result<ResolvedStatement<'src>, ResolutionError> {
+        let ann = stmt.annotation;
+        match stmt.value {
+            Statement::Expression(e) => self
+                .resolve_expr(e)
+                .map(|e| Statement::Expression(e).annotate(ann)),
+            Statement::Print(e) => self
+                .resolve_expr(e)
+                .map(|e| Statement::Print(e).annotate(ann)),
             Statement::If(e, s1, s2) => {
                 let e = self.resolve_expr(e)?;
                 let s1 = self.resolve_statement(*s1)?;
                 let s2 = s2.map(|s| self.resolve_statement(*s)).transpose()?;
-                Ok(Statement::If(e, Box::new(s1), s2.map(Box::new)))
+                Ok(Statement::If(e, Box::new(s1), s2.map(Box::new)).annotate(ann))
             }
             Statement::While(e, s) => {
                 let e = self.resolve_expr(e)?;
                 let s = self.resolve_statement(*s)?;
-                Ok(Statement::While(e, Box::new(s)))
+                Ok(Statement::While(e, Box::new(s)).annotate(ann))
             }
             Statement::Block(decls) => {
                 self.scopes.push(HashMap::new());
@@ -177,9 +180,11 @@ impl<'src> Resolver<'src> {
                     .collect::<Result<Vec<_>, _>>()?;
                 self.scopes.pop();
 
-                Ok(Statement::Block(decls))
+                Ok(Statement::Block(decls).annotate(ann))
             }
-            Statement::Return(expr) => self.resolve_expr(expr).map(Statement::Return),
+            Statement::Return(expr) => self
+                .resolve_expr(expr)
+                .map(|e| Statement::Return(e).annotate(ann)),
         }
     }
     pub fn resolve_declaration(

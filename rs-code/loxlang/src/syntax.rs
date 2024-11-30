@@ -26,7 +26,7 @@ pub struct Annotated<T, A> {
     pub value: T,
     pub annotation: A,
 }
-// TODO Annotation also for Statement and Declaration?
+// TODO Annotation also for Declaration?
 #[derive(Debug, Clone)]
 pub enum Statement<'a, VR, VD, Ann> {
     Expression(AnnotatedExpression<'a, VR, Ann>),
@@ -34,16 +34,16 @@ pub enum Statement<'a, VR, VD, Ann> {
     Block(Vec<Declaration<'a, VR, VD, Ann>>),
     If(
         AnnotatedExpression<'a, VR, Ann>,
-        Box<Statement<'a, VR, VD, Ann>>,
-        Option<Box<Statement<'a, VR, VD, Ann>>>,
+        Box<AnnotatedStatement<'a, VR, VD, Ann>>,
+        Option<Box<AnnotatedStatement<'a, VR, VD, Ann>>>,
     ),
     While(
         AnnotatedExpression<'a, VR, Ann>,
-        Box<Statement<'a, VR, VD, Ann>>,
+        Box<AnnotatedStatement<'a, VR, VD, Ann>>,
     ),
-    // For(ForLoopDef<'a, VR, VD, Ann>, Box<Statement<'a, VR, VD, Ann>>),
     Return(AnnotatedExpression<'a, VR, Ann>),
 }
+pub type AnnotatedStatement<'a, VR, VD, Ann> = Annotated<Statement<'a, VR, VD, Ann>, Ann>;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Variable<Var>(pub Var);
@@ -57,9 +57,9 @@ pub enum Declaration<'a, VR, VD, Ann> {
     Function {
         name: VariableDecl<VD>,
         args: Vec<VariableDecl<VD>>,
-        body: Statement<'a, VR, VD, Ann>,
+        body: AnnotatedStatement<'a, VR, VD, Ann>,
     },
-    Statement(Statement<'a, VR, VD, Ann>),
+    Statement(AnnotatedStatement<'a, VR, VD, Ann>),
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +92,14 @@ pub enum BOperator {
 }
 
 impl<'a, Var, Ann> Expression<'a, Var, Ann> {
+    pub fn annotate(self, annotation: Ann) -> Annotated<Self, Ann> {
+        Annotated {
+            value: self,
+            annotation,
+        }
+    }
+}
+impl<'a, VR, VD, Ann> Statement<'a, VR, VD, Ann> {
     pub fn annotate(self, annotation: Ann) -> Annotated<Self, Ann> {
         Annotated {
             value: self,
