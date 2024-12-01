@@ -108,8 +108,9 @@ struct Node<'src> {
     parent: Option<StackRef<'src>>,
 }
 impl<'src> Stack<'src> {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let mut global_env = StackFrame::new();
+        // Hidden coupling NATIVE_FUNC_VAR_IDS
         for (i, func) in NativeFunc::iter().enumerate() {
             global_env.set(i as u64, Value::NativeFunction(func));
         }
@@ -138,7 +139,7 @@ impl<'src> Stack<'src> {
         // TODO this unwrap doesn't need to be here
         self.head = self.head.as_ref().parent.clone().unwrap();
     }
-    pub fn lookup(&self, name: VResolution) -> Option<Value<'src>> {
+    fn lookup(&self, name: VResolution) -> Option<Value<'src>> {
         let mut node = self.head.as_ref();
         let (var_id, depth) = name;
         for _ in 0..depth {
@@ -146,7 +147,7 @@ impl<'src> Stack<'src> {
         }
         node.env.lock().unwrap().lookup(&var_id)
     }
-    pub fn assign(&self, name: VResolution, value: Value<'src>) -> Result<(), NotFound> {
+    fn assign(&self, name: VResolution, value: Value<'src>) -> Result<(), NotFound> {
         let mut node = self.head.as_ref();
         let (var_id, depth) = name;
         for _ in 0..depth {
@@ -156,7 +157,7 @@ impl<'src> Stack<'src> {
         g.set(var_id, value);
         Ok(())
     }
-    pub fn declare(&mut self, var_id: VarId, value: Value<'src>) {
+    fn declare(&mut self, var_id: VarId, value: Value<'src>) {
         self.get_env().lock().unwrap().set(var_id, value);
     }
 }

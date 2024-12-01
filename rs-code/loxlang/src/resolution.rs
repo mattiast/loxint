@@ -39,15 +39,7 @@ pub fn resolve<'src>(
     x: ParsedProgram<'src>,
     src: &'src str,
 ) -> Result<ResolvedProgram<'src>, ResolutionError> {
-    let mut resolver = Resolver {
-        scopes: vec![NativeFunc::iter()
-            .enumerate()
-            .map(|(i, nf)| (nf.name(), i as u64))
-            .collect()],
-
-        next_id: NativeFunc::count() as u64,
-        src,
-    };
+    let mut resolver = Resolver::new(src);
     return resolver.resolve_program(x);
 }
 pub fn resolve_expr_no_var<'src>(
@@ -71,6 +63,7 @@ pub struct Resolver<'src> {
 
 impl<'src> Resolver<'src> {
     pub fn new(src: &'src str) -> Self {
+        // Hidden coupling NATIVE_FUNC_VAR_IDS
         Resolver {
             scopes: vec![NativeFunc::iter()
                 .enumerate()
