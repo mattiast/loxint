@@ -73,7 +73,7 @@ pub enum UOperator {
     BANG,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum BOperator {
     PLUS,
     MINUS,

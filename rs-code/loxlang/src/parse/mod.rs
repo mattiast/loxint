@@ -1,3 +1,4 @@
+mod chu;
 pub mod scanner;
 use std::ops::{self, Range};
 
