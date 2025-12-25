@@ -2,7 +2,9 @@ name: Build and Deploy to GitHub Pages
 
 on:
   push:
-    branches: ["**"]  # Trigger on all branches
+    branches: ["main"]  # Trigger on all branches
+  pull_request:
+    branches: ["main"]
   workflow_dispatch:
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
