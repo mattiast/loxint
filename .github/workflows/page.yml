@@ -48,21 +48,31 @@ jobs:
 
       - name: Generate JS bindings
         run: |
-          wasm-bindgen ../target/wasm32-unknown-unknown/release/loxwasm.wasm \
+          wasm-bindgen ../rs-code/target/wasm32-unknown-unknown/release/loxwasm.wasm \
             --out-dir ./dist \
-            --target web \
-            --no-typescript
-        working-directory: ./rs-code/loxwasm
+            --target web
+        working-directory: ./playground
 
-      - name: Copy HTML to dist
-        run: cp page.html dist/index.html
-        working-directory: ./rs-code/loxwasm
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '25'
+          cache: 'npm'
+          cache-dependency-path: './playground/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./playground
+
+      - name: Build TypeScript with Vite
+        run: npm run build
+        working-directory: ./playground
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: wasm-dist
-          path: './rs-code/loxwasm/dist'
+          path: './playground/dist'
 
   deploy:
     runs-on: ubuntu-latest
