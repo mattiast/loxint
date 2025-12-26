@@ -49,8 +49,7 @@ jobs:
         run: |
           wasm-bindgen ../target/wasm32-unknown-unknown/release/loxwasm.wasm \
             --out-dir ./dist \
-            --target web \
-            --no-typescript
+            --target web
         working-directory: ./rs-code/loxwasm
 
       - name: Setup Node.js
