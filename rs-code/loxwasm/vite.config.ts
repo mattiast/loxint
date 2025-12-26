@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   build: {
+    target: 'es2022', // Support top-level await
     outDir: 'dist',
     emptyOutDir: false, // Don't clear dist/ since WASM files are already there
     rollupOptions: {
