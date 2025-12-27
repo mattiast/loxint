@@ -38,8 +38,9 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
-      - name: Install wasm-bindgen-cli
-        run: cargo install wasm-bindgen-cli
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen
 
       - name: Build WASM
         run: cargo build --release --target wasm32-unknown-unknown
