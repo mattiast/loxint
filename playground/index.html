@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lox Playground</title>
+</head>
+<body>
+    <h1>Lox Playground</h1>
+
+    <h2>Single Expression</h2>
+    <input id="code" cols="80" type="text" autofocus>
+    <br>
+    <button id="executeButton">Execute Code</button>
+    <br>
+    <textarea id="output" rows="10" cols="80" readonly></textarea>
+
+    <hr>
+
+    <h2>Multi-line Program</h2>
+    <textarea id="multiLineCode" rows="10" cols="80">
+fun f(x) {
+    print x/2;
+}
+var a = 1;
+while (a < 10) {
+    f(a-1);
+    a = a + 1;
+}
+</textarea>
+    <br>
+    <button id="executeMultiLineButton">Execute Multi-Line Code</button>
+    <br>
+    <textarea id="multiLineOutput" rows="10" cols="80" readonly></textarea>
+
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
