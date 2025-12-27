@@ -1,5 +1,6 @@
 // Import WASM module functions
 import init, { eval_expr, run_program } from '../dist/loxwasm.js';
+import { formatResult, formatError, joinOutputLines, isErrorResult } from './utils';
 
 // Initialize WASM module
 await init();
@@ -18,9 +19,9 @@ function executeCode(): void {
     const code = codeInput.value;
     try {
         const result = eval_expr(code);
-        output.value = "Result: " + result;
+        output.value = formatResult(result);
     } catch (error) {
-        output.value = "Error: " + error;
+        output.value = formatError(error);
     }
 }
 
@@ -30,10 +31,11 @@ function executeMultiLineCode(): void {
     try {
         const result = run_program(code);
         // Result is an array of strings (print output)
-        multiLineOutput.value = result.join('\n');
+        multiLineOutput.value = joinOutputLines(result);
         multiLineOutput.style.backgroundColor = '';
     } catch (error) {
-        multiLineOutput.value = "Error: \n" + error;
+        const errorMsg = formatError(error);
+        multiLineOutput.value = errorMsg;
         multiLineOutput.style.backgroundColor = 'lightcoral';
     }
 }
