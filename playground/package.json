@@ -5,11 +5,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
-    "vite": "^5.0.11"
+    "vite": "^5.0.11",
+    "vitest": "^1.2.0",
+    "@vitest/ui": "^1.2.0",
+    "happy-dom": "^12.10.3"
   },
   "dependencies": {
     "@codemirror/commands": "^6.3.3",

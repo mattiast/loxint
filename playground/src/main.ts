@@ -1,5 +1,6 @@
 // Import WASM module functions
 import init, { eval_expr, run_program } from '../dist/loxwasm.js';
+import { formatResult, formatError, joinOutputLines } from './utils';
 
 // Import CodeMirror
 import { EditorView, keymap, Decoration, DecorationSet } from '@codemirror/view';
@@ -104,10 +105,10 @@ function executeSingleLine(): void {
 
   try {
     const result = eval_expr(code);
-    output.value = "Result: " + result;
+    output.value = formatResult(result);
     output.style.backgroundColor = '';
   } catch (error) {
-    output.value = "Error: " + error;
+    output.value = formatError(error);
     output.style.backgroundColor = 'lightcoral';
 
     // TODO: Parse error to extract position and highlight
@@ -123,10 +124,10 @@ function executeMultiLine(): void {
 
   try {
     const result = run_program(code);
-    multiLineOutput.value = result.join('\n');
+    multiLineOutput.value = joinOutputLines(result);
     multiLineOutput.style.backgroundColor = '';
   } catch (error) {
-    multiLineOutput.value = "Error: \n" + error;
+    multiLineOutput.value = formatError(error);
     multiLineOutput.style.backgroundColor = 'lightcoral';
 
     // TODO: Parse error to extract position and highlight
