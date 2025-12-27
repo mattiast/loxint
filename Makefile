@@ -1,5 +1,9 @@
 .PHONY: help build-wasm test-ts test-all watch clean install
 
+# Use CARGO_TARGET_DIR environment variable if set, otherwise default to rs-code/target
+CARGO_TARGET_DIR ?= rs-code/target
+export CARGO_TARGET_DIR
+
 # Default target
 help:
 	@echo "Lox Interpreter Build and Test System"
@@ -26,7 +30,7 @@ build-wasm:
 	@echo "Building Rust WASM module..."
 	cd rs-code/loxwasm && cargo build --release --target wasm32-unknown-unknown
 	@echo "Generating JavaScript bindings..."
-	wasm-bindgen rs-code/target/wasm32-unknown-unknown/release/loxwasm.wasm \
+	wasm-bindgen $(CARGO_TARGET_DIR)/wasm32-unknown-unknown/release/loxwasm.wasm \
 		--out-dir playground/dist \
 		--target web
 	@echo "WASM build complete!"
