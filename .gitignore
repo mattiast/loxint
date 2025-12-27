@@ -1,0 +1,10 @@
+# Rust build artifacts
+rs-code/target/
+**/target/
+
+# Cargo lock file for workspace (if not needed)
+# Cargo.lock
+
+# OS files
+.DS_Store
+Thumbs.db
