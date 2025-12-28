@@ -37,6 +37,15 @@ const errorField = StateField.define<DecorationSet>({
 const addErrorEffect = StateEffect.define<Array<{ from: number, to: number }>>();
 const clearErrorsEffect = StateEffect.define();
 
+// Helper function to add error highlights
+function highlightError(view: EditorView, from: number, to: number) {
+  view.dispatch({
+    effects: addErrorEffect.of([{ from, to }].map(range =>
+      errorDecoration.range(range.from, range.to)
+    ))
+  });
+}
+
 // Helper function to clear error highlights
 function clearErrors(view: EditorView) {
   view.dispatch({
