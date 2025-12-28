@@ -48,7 +48,7 @@ jobs:
 
       - name: Generate JS bindings
         run: |
-          wasm-pack ../rs-code/loxwasm \
+          wasm-pack build ../rs-code/loxwasm \
             --out-dir ./loxwasm-pkg \
             --target bundler
         working-directory: ./playground
