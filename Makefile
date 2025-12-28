@@ -19,8 +19,8 @@ build-wasm:
 	cd rs-code/loxwasm && cargo build --release --target wasm32-unknown-unknown
 	@echo "Generating JavaScript bindings..."
 	wasm-bindgen $(CARGO_TARGET_DIR)/wasm32-unknown-unknown/release/loxwasm.wasm \
-		--out-dir playground/dist \
-		--target web
+		--out-dir playground/loxwasm-pkg \
+		--target bundler
 	@echo "WASM build complete!"
 
 # Run TypeScript tests

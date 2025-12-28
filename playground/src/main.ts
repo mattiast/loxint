@@ -1,14 +1,11 @@
 // Import WASM module functions
-import init, { eval_expr, run_program } from '../dist/loxwasm.js';
+import { eval_expr, LoxResult, run_program } from '../loxwasm-pkg/loxwasm';
 import { formatResult, formatError, joinOutputLines } from './utils';
 
 // Import CodeMirror
 import { EditorView, keymap, Decoration, DecorationSet } from '@codemirror/view';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
-
-// Initialize WASM module
-await init();
 
 // Define error decoration type
 const errorDecoration = Decoration.mark({
@@ -103,18 +100,19 @@ function executeSingleLine(): void {
   const code = singleLineEditor.state.doc.toString();
   clearErrors(singleLineEditor);
 
-  try {
-    const result = eval_expr(code);
-    output.value = formatResult(result);
-    output.style.backgroundColor = '';
-  } catch (error) {
-    output.value = formatError(error);
-    output.style.backgroundColor = 'lightcoral';
+    const result = eval_expr(code) as LoxResult<string>;
+    if (result.type === "Success") {
+        output.value = formatResult(result.value);
+        output.style.backgroundColor = '';
+    } else {
+        const error = result.value;
+        output.value = formatError(error.message + ` (at ${error.span.start}-${error.span.end})`);
+        output.style.backgroundColor = 'lightcoral';
 
-    // TODO: Parse error to extract position and highlight
-    // For now, we'll just show the error text
-    console.log('Error details:', error);
-  }
+        // TODO: Parse error to extract position and highlight
+        // For now, we'll just show the error text
+        console.log('Error details:', error);
+    }
 }
 
 // Multi-line program execution
@@ -122,12 +120,13 @@ function executeMultiLine(): void {
   const code = multiLineEditor.state.doc.toString();
   clearErrors(multiLineEditor);
 
-  try {
-    const result = run_program(code);
-    multiLineOutput.value = joinOutputLines(result);
+  const result = run_program(code) as LoxResult<string[]>;
+  if (result.type === "Success") {
+    multiLineOutput.value = joinOutputLines(result.value);
     multiLineOutput.style.backgroundColor = '';
-  } catch (error) {
-    multiLineOutput.value = formatError(error);
+  } else {
+    const error = result.value;
+    multiLineOutput.value = formatError(error.message + ` (at ${error.span.start}-${error.span.end})`);
     multiLineOutput.style.backgroundColor = 'lightcoral';
 
     // TODO: Parse error to extract position and highlight
