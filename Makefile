@@ -1,8 +1,7 @@
 .PHONY: help build-wasm test-ts clean
 
-# Use CARGO_TARGET_DIR environment variable if set, otherwise default to rs-code/target
-CARGO_TARGET_DIR ?= rs-code/target
-export CARGO_TARGET_DIR
+MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MKFILE_DIR := $(dir $(MKFILE_PATH))
 
 # Default target
 help:
@@ -15,11 +14,12 @@ help:
 
 # Build WASM from Rust code
 build-wasm:
-	@echo "Building Rust WASM module..."
-	cd rs-code/loxwasm && cargo build --release --target wasm32-unknown-unknown
-	@echo "Generating JavaScript bindings..."
-	wasm-bindgen $(CARGO_TARGET_DIR)/wasm32-unknown-unknown/release/loxwasm.wasm \
-		--out-dir playground/loxwasm-pkg \
+	@echo "Building Rust WASM module and generating JavaScript bindings..."
+	# Use absolute path for the output directory
+	# to ensure wasm-pack works correctly
+	wasm-pack build ${MKFILE_DIR}/rs-code/loxwasm \
+		--release \
+		--out-dir ${MKFILE_DIR}/playground/loxwasm-pkg \
 		--target bundler
 	@echo "WASM build complete!"
 
@@ -33,5 +33,5 @@ clean:
 	@echo "Cleaning Rust build artifacts..."
 	cd rs-code && cargo clean
 	@echo "Cleaning Node.js build artifacts..."
-	cd playground && rm -rf dist node_modules
+	cd playground && rm -rf dist node_modules loxwasm-pkg
 	@echo "Clean complete!"
