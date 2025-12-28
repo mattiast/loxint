@@ -24,7 +24,7 @@ pub enum LoxError {
     RuntimeError(#[from] runtime::RuntimeError),
 }
 
-pub fn parse_program(source: &str) -> Result<RunnableProgram, LoxError> {
+pub fn parse_program(source: &str) -> Result<RunnableProgram<'_>, LoxError> {
     let tokens = parse::scanner::parse_tokens(source)?;
     let program = parse::Parser::new(source, &tokens).parse_program()?;
     let program = resolution::resolve(program, source)?;
