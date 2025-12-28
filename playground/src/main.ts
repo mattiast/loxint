@@ -3,55 +3,10 @@ import { eval_expr, LoxResult, run_program } from '../loxwasm-pkg/loxwasm';
 import { formatResult, formatError, joinOutputLines } from './utils';
 
 // Import CodeMirror
-import { EditorView, keymap, Decoration, DecorationSet } from '@codemirror/view';
-import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { EditorView, keymap } from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
-
-// Define error decoration type
-const errorDecoration = Decoration.mark({
-  class: 'cm-error-highlight'
-});
-
-// State field to manage error decorations
-const errorField = StateField.define<DecorationSet>({
-  create() {
-    return Decoration.none;
-  },
-  update(decorations, transaction) {
-    decorations = decorations.map(transaction.changes);
-    for (let effect of transaction.effects) {
-      if (effect.is(addErrorEffect)) {
-        decorations = decorations.update({
-          add: effect.value.map(range => errorDecoration.range(range.from, range.to))
-        });
-      } else if (effect.is(clearErrorsEffect)) {
-        decorations = Decoration.none;
-      }
-    }
-    return decorations;
-  },
-  provide: f => EditorView.decorations.from(f)
-});
-
-// State effects for adding/clearing errors
-const addErrorEffect = StateEffect.define<Array<{ from: number, to: number }>>();
-const clearErrorsEffect = StateEffect.define();
-
-// Helper function to add error highlights
-function highlightError(view: EditorView, from: number, to: number) {
-  view.dispatch({
-    effects: addErrorEffect.of([{ from, to }].map(range =>
-      errorDecoration.range(range.from, range.to)
-    ))
-  });
-}
-
-// Helper function to clear error highlights
-function clearErrors(view: EditorView) {
-  view.dispatch({
-    effects: clearErrorsEffect.of(null)
-  });
-}
+import { linter, Diagnostic, lintGutter, setDiagnostics } from '@codemirror/lint';
 
 // Create single-line expression editor
 const singleLineEditor = new EditorView({
@@ -68,7 +23,7 @@ const singleLineEditor = new EditorView({
           }
         }
       ]),
-      errorField,
+      linter(null),
       EditorView.lineWrapping
     ]
   }),
@@ -90,7 +45,8 @@ const multiLineEditor = new EditorView({
     doc: exampleCode,
     extensions: [
       keymap.of(defaultKeymap),
-      errorField,
+      linter(null),
+      lintGutter(),
       EditorView.lineWrapping,
       EditorState.tabSize.of(4)
     ]
@@ -107,7 +63,7 @@ const multiLineOutput = document.getElementById('multiLineOutput') as HTMLTextAr
 // Single-line expression execution
 function executeSingleLine(): void {
   const code = singleLineEditor.state.doc.toString();
-  clearErrors(singleLineEditor);
+    singleLineEditor.dispatch(setDiagnostics(singleLineEditor.state, []));
 
     const result = eval_expr(code) as LoxResult<string>;
     if (result.type === "Success") {
@@ -118,14 +74,20 @@ function executeSingleLine(): void {
         output.value = formatError(error.message);
         output.style.backgroundColor = 'lightcoral';
 
-        highlightError(singleLineEditor, error.span.start, error.span.end);
+        const diagnostic: Diagnostic = {
+          from: error.span.start,
+          to: error.span.end,
+          severity: 'error',
+          message: error.message
+        };
+        singleLineEditor.dispatch(setDiagnostics(singleLineEditor.state, [diagnostic]));
     }
 }
 
 // Multi-line program execution
 function executeMultiLine(): void {
   const code = multiLineEditor.state.doc.toString();
-  clearErrors(multiLineEditor);
+  multiLineEditor.dispatch(setDiagnostics(multiLineEditor.state, []));
 
   const result = run_program(code) as LoxResult<string[]>;
   if (result.type === "Success") {
@@ -136,7 +98,13 @@ function executeMultiLine(): void {
     multiLineOutput.value = formatError(error.message);
     multiLineOutput.style.backgroundColor = 'lightcoral';
 
-    highlightError(multiLineEditor, error.span.start, error.span.end);
+    const diagnostic: Diagnostic = {
+      from: error.span.start,
+      to: error.span.end,
+      severity: 'error',
+      message: error.message
+    };
+    multiLineEditor.dispatch(setDiagnostics(multiLineEditor.state, [diagnostic]));
   }
 }
 
