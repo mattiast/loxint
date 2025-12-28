@@ -48,10 +48,9 @@ jobs:
 
       - name: Generate JS bindings
         run: |
-          wasm-pack build ../rs-code/loxwasm \
-            --out-dir ./loxwasm-pkg \
+          wasm-pack build $GITHUB_WORKSPACE/rs-code/loxwasm \
+            --out-dir $GITHUB_WORKSPACE/playground/loxwasm-pkg \
             --target bundler
-        working-directory: ./playground
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
