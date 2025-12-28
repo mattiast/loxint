@@ -6,8 +6,7 @@ describe('WASM Module Integration', () => {
     beforeAll(async () => {
         try {
             // Dynamically import the WASM module
-            const { default: init, eval_expr, run_program } = await import('../dist/loxwasm.js');
-            await init();
+            const { eval_expr, run_program } = await import('../loxwasm-pkg/loxwasm');
             wasmModule = { eval_expr, run_program };
         } catch (error) {
             console.warn('WASM module not available, skipping integration tests:', error);

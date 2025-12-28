@@ -40,7 +40,7 @@ jobs:
 
       - uses: taiki-e/install-action@v2
         with:
-          tool: wasm-bindgen
+          tool: wasm-bindgen,wasm-pack
 
       - name: Build WASM
         run: cargo build --release --target wasm32-unknown-unknown
@@ -48,9 +48,9 @@ jobs:
 
       - name: Generate JS bindings
         run: |
-          wasm-bindgen ../rs-code/target/wasm32-unknown-unknown/release/loxwasm.wasm \
-            --out-dir ./dist \
-            --target web
+          wasm-pack ../rs-code/loxwasm \
+            --out-dir ./loxwasm-pkg \
+            --target bundler
         working-directory: ./playground
 
       - name: Setup Node.js
