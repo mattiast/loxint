@@ -6,6 +6,7 @@ import { formatResult, formatError, joinOutputLines } from './utils';
 import { EditorView, keymap, Decoration, DecorationSet } from '@codemirror/view';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
+import { linter, Diagnostic, lintGutter, setDiagnostics } from '@codemirror/lint';
 
 // Define error decoration type
 const errorDecoration = Decoration.mark({
@@ -90,7 +91,8 @@ const multiLineEditor = new EditorView({
     doc: exampleCode,
     extensions: [
       keymap.of(defaultKeymap),
-      errorField,
+      linter(null),
+      lintGutter(),
       EditorView.lineWrapping,
       EditorState.tabSize.of(4)
     ]
@@ -126,6 +128,7 @@ function executeSingleLine(): void {
 function executeMultiLine(): void {
   const code = multiLineEditor.state.doc.toString();
   clearErrors(multiLineEditor);
+  multiLineEditor.dispatch(setDiagnostics(multiLineEditor.state, []));
 
   const result = run_program(code) as LoxResult<string[]>;
   if (result.type === "Success") {
@@ -136,7 +139,13 @@ function executeMultiLine(): void {
     multiLineOutput.value = formatError(error.message);
     multiLineOutput.style.backgroundColor = 'lightcoral';
 
-    highlightError(multiLineEditor, error.span.start, error.span.end);
+    const diagnostic: Diagnostic = {
+      from: error.span.start,
+      to: error.span.end,
+      severity: 'error',
+      message: error.message
+    };
+    multiLineEditor.dispatch(setDiagnostics(multiLineEditor.state, [diagnostic]));
   }
 }
 
