@@ -3,8 +3,8 @@ import { eval_expr, LoxResult, run_program } from '../loxwasm-pkg/loxwasm';
 import { formatResult, formatError, joinOutputLines } from './utils';
 
 // Import CodeMirror
-import { EditorView, keymap, Decoration, DecorationSet } from '@codemirror/view';
-import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { EditorView, keymap, Decoration } from '@codemirror/view';
+import { EditorState, StateEffect } from '@codemirror/state';
 import { defaultKeymap } from '@codemirror/commands';
 import { linter, Diagnostic, lintGutter, setDiagnostics } from '@codemirror/lint';
 
@@ -13,26 +13,6 @@ const errorDecoration = Decoration.mark({
   class: 'cm-error-highlight'
 });
 
-// State field to manage error decorations
-const errorField = StateField.define<DecorationSet>({
-  create() {
-    return Decoration.none;
-  },
-  update(decorations, transaction) {
-    decorations = decorations.map(transaction.changes);
-    for (let effect of transaction.effects) {
-      if (effect.is(addErrorEffect)) {
-        decorations = decorations.update({
-          add: effect.value.map(range => errorDecoration.range(range.from, range.to))
-        });
-      } else if (effect.is(clearErrorsEffect)) {
-        decorations = Decoration.none;
-      }
-    }
-    return decorations;
-  },
-  provide: f => EditorView.decorations.from(f)
-});
 
 // State effects for adding/clearing errors
 const addErrorEffect = StateEffect.define<Array<{ from: number, to: number }>>();
@@ -69,7 +49,7 @@ const singleLineEditor = new EditorView({
           }
         }
       ]),
-      errorField,
+      linter(null),
       EditorView.lineWrapping
     ]
   }),
@@ -110,6 +90,7 @@ const multiLineOutput = document.getElementById('multiLineOutput') as HTMLTextAr
 function executeSingleLine(): void {
   const code = singleLineEditor.state.doc.toString();
   clearErrors(singleLineEditor);
+    singleLineEditor.dispatch(setDiagnostics(singleLineEditor.state, []));
 
     const result = eval_expr(code) as LoxResult<string>;
     if (result.type === "Success") {
@@ -121,6 +102,13 @@ function executeSingleLine(): void {
         output.style.backgroundColor = 'lightcoral';
 
         highlightError(singleLineEditor, error.span.start, error.span.end);
+        const diagnostic: Diagnostic = {
+          from: error.span.start,
+          to: error.span.end,
+          severity: 'error',
+          message: error.message
+        };
+        singleLineEditor.dispatch(setDiagnostics(singleLineEditor.state, [diagnostic]));
     }
 }
 
