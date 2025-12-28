@@ -4,10 +4,10 @@ use miette::{Diagnostic, SourceOffset};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
-    character::complete::{char, digit1},
-    combinator::{map, map_res, opt, recognize},
-    sequence::tuple,
-    IResult,
+    character::complete::char,
+    combinator::recognize,
+    number::complete::double,
+    IResult, Parser,
 };
 use thiserror::Error;
 
@@ -78,13 +78,10 @@ fn parse_identifier(input: &str) -> IResult<&str, &str> {
     // this will match one or more non-digits, then digits are allowed
     let first_char = take_while1(is_letter_or_underscore);
 
-    recognize(tuple((
-        first_char,
-        take_while(is_letter_digit_or_underscore),
-    )))(input)
+    recognize((first_char, take_while(is_letter_digit_or_underscore))).parse(input)
 }
 
-fn parse_identifier_or_reserved(input: &str) -> IResult<&str, Token> {
+fn parse_identifier_or_reserved(input: &str) -> IResult<&str, Token<'_>> {
     let (input, identifier) = parse_identifier(input)?;
     let reserved = match identifier {
         "and" => Reserved::AND,
@@ -110,45 +107,41 @@ fn parse_identifier_or_reserved(input: &str) -> IResult<&str, Token> {
 
 fn parse_symbol(input: &str) -> IResult<&str, Symbol> {
     alt((
-        map(tag("("), |_| Symbol::LeftParen),
-        map(tag(")"), |_| Symbol::RightParen),
-        map(tag("{"), |_| Symbol::LeftBrace),
-        map(tag("}"), |_| Symbol::RightBrace),
-        map(tag(","), |_| Symbol::COMMA),
-        map(tag("."), |_| Symbol::DOT),
-        map(tag("-"), |_| Symbol::MINUS),
-        map(tag("+"), |_| Symbol::PLUS),
-        map(tag(";"), |_| Symbol::SEMICOLON),
-        map(tag("/"), |_| Symbol::SLASH),
-        map(tag("*"), |_| Symbol::STAR),
-        map(tag("!="), |_| Symbol::BangEqual),
-        map(tag("!"), |_| Symbol::BANG),
-        map(tag("=="), |_| Symbol::EqualEqual),
-        map(tag("="), |_| Symbol::EQUAL),
-        map(tag(">="), |_| Symbol::GreaterEqual),
-        map(tag(">"), |_| Symbol::GREATER),
-        map(tag("<="), |_| Symbol::LessEqual),
-        map(tag("<"), |_| Symbol::LESS),
-    ))(input)
+        tag("!=").map(|_| Symbol::BangEqual),
+        tag("==").map(|_| Symbol::EqualEqual),
+        tag(">=").map(|_| Symbol::GreaterEqual),
+        tag("<=").map(|_| Symbol::LessEqual),
+        tag("(").map(|_| Symbol::LeftParen),
+        tag(")").map(|_| Symbol::RightParen),
+        tag("{").map(|_| Symbol::LeftBrace),
+        tag("}").map(|_| Symbol::RightBrace),
+        tag(",").map(|_| Symbol::COMMA),
+        tag(".").map(|_| Symbol::DOT),
+        tag("-").map(|_| Symbol::MINUS),
+        tag("+").map(|_| Symbol::PLUS),
+        tag(";").map(|_| Symbol::SEMICOLON),
+        tag("/").map(|_| Symbol::SLASH),
+        tag("*").map(|_| Symbol::STAR),
+        tag("!").map(|_| Symbol::BANG),
+        tag("=").map(|_| Symbol::EQUAL),
+        tag(">").map(|_| Symbol::GREATER),
+        tag("<").map(|_| Symbol::LESS),
+    ))
+    .parse(input)
 }
-
 fn parse_string_literal(input: &str) -> IResult<&str, &str> {
-    let (input, _) = char('"')(input)?;
-    let (input, string) = take_while(|c| c != '"')(input)?;
-    let (input, _) = char('"')(input)?;
-    Ok((input, string))
+    (char('"'), take_while(|c| c != '"'), char('"'))
+        .map(|(_, string, _)| string)
+        .parse(input)
 }
-fn parse_number(input: &str) -> IResult<&str, f64> {
-    let parse_number = recognize(tuple((digit1, opt(tuple((char('.'), digit1))))));
-    map_res(parse_number, |s: &str| s.parse::<f64>())(input)
-}
-fn parse_token(input: &str) -> IResult<&str, Token> {
+fn parse_token<'a>(input: &'a str) -> IResult<&'a str, Token<'a>> {
     alt((
         parse_identifier_or_reserved,
-        map(parse_symbol, Token::Symbol),
-        map(parse_number, Token::NumberLiteral),
-        map(parse_string_literal, Token::StringLiteral),
-    ))(input)
+        parse_symbol.map(|sym| Token::Symbol(sym)),
+        double.map(|num| Token::NumberLiteral(num)),
+        parse_string_literal.map(|lit| Token::StringLiteral(lit)),
+    ))
+    .parse(input)
 }
 
 #[derive(Error, Debug, Diagnostic)]
@@ -159,7 +152,7 @@ pub struct LexicalError {
     #[label("No valid token here")]
     pub source_offset: SourceOffset,
 }
-pub fn parse_tokens(input: &str) -> Result<Vec<(Token, Range<usize>)>, LexicalError> {
+pub fn parse_tokens(input: &str) -> Result<Vec<(Token<'_>, Range<usize>)>, LexicalError> {
     let mut tokens = Vec::new();
     let start = input;
     let mut input = input.trim_start();
@@ -208,14 +201,6 @@ mod tests {
         let input = "!=";
         let expected = Ok(("", Symbol::BangEqual));
         let actual = parse_symbol(input);
-        assert_eq!(actual, expected);
-    }
-
-    #[test]
-    fn test_parse_number() {
-        let input = "123.456";
-        let expected = Ok(("", 123.456));
-        let actual = parse_number(input);
         assert_eq!(actual, expected);
     }
 
