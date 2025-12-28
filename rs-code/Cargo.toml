@@ -4,6 +4,6 @@ resolver = "2"
 
 [workspace.dependencies]
 clap = { version = "4", features = ["derive"] }
-nom = "7"
+nom = "8"
 thiserror = "2"
 miette = "7"
