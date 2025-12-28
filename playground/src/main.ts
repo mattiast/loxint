@@ -37,6 +37,15 @@ const errorField = StateField.define<DecorationSet>({
 const addErrorEffect = StateEffect.define<Array<{ from: number, to: number }>>();
 const clearErrorsEffect = StateEffect.define();
 
+// Helper function to add error highlights
+function highlightError(view: EditorView, from: number, to: number) {
+  view.dispatch({
+    effects: addErrorEffect.of([{ from, to }].map(range =>
+      errorDecoration.range(range.from, range.to)
+    ))
+  });
+}
+
 // Helper function to clear error highlights
 function clearErrors(view: EditorView) {
   view.dispatch({
@@ -106,12 +115,10 @@ function executeSingleLine(): void {
         output.style.backgroundColor = '';
     } else {
         const error = result.value;
-        output.value = formatError(error.message + ` (at ${error.span.start}-${error.span.end})`);
+        output.value = formatError(error.message);
         output.style.backgroundColor = 'lightcoral';
 
-        // TODO: Parse error to extract position and highlight
-        // For now, we'll just show the error text
-        console.log('Error details:', error);
+        highlightError(singleLineEditor, error.span.start, error.span.end);
     }
 }
 
@@ -126,12 +133,10 @@ function executeMultiLine(): void {
     multiLineOutput.style.backgroundColor = '';
   } else {
     const error = result.value;
-    multiLineOutput.value = formatError(error.message + ` (at ${error.span.start}-${error.span.end})`);
+    multiLineOutput.value = formatError(error.message);
     multiLineOutput.style.backgroundColor = 'lightcoral';
 
-    // TODO: Parse error to extract position and highlight
-    // For now, we'll just show the error text
-    console.log('Error details:', error);
+    highlightError(multiLineEditor, error.span.start, error.span.end);
   }
 }
 
