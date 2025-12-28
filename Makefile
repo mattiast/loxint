@@ -1,4 +1,4 @@
-.PHONY: help build-wasm test-ts test-all watch clean install
+.PHONY: help build-wasm test-ts clean
 
 # Use CARGO_TARGET_DIR environment variable if set, otherwise default to rs-code/target
 CARGO_TARGET_DIR ?= rs-code/target
@@ -11,19 +11,7 @@ help:
 	@echo "Available targets:"
 	@echo "  build-wasm    - Build Rust code to WebAssembly"
 	@echo "  test-ts       - Run TypeScript tests"
-	@echo "  test-all      - Run Rust tests and TypeScript tests"
-	@echo "  watch         - Watch Rust files and run tests on changes"
-	@echo "  install       - Install dependencies (Rust & Node.js)"
 	@echo "  clean         - Clean build artifacts"
-
-# Install all dependencies
-install:
-	@echo "Installing Rust dependencies..."
-	cd rs-code && cargo fetch
-	@echo "Installing Node.js dependencies..."
-	cd playground && npm install
-	@echo "Installing cargo-watch (for watch mode)..."
-	cargo install cargo-watch || echo "cargo-watch already installed"
 
 # Build WASM from Rust code
 build-wasm:
@@ -39,24 +27,6 @@ build-wasm:
 test-ts: build-wasm
 	@echo "Running TypeScript tests..."
 	cd playground && npm test
-
-# Run all tests (Rust + TypeScript)
-test-all:
-	@echo "Running Rust tests..."
-	cd rs-code && cargo test --workspace
-	@echo "Building WASM and running TypeScript tests..."
-	$(MAKE) test-ts
-
-# Watch Rust files and rebuild + test on changes
-watch:
-	@echo "Watching Rust files for changes..."
-	@echo "Will rebuild WASM and run TypeScript tests on each change"
-	@echo "Press Ctrl+C to stop"
-	cd rs-code && cargo watch \
-		-w loxlang/src \
-		-w loxwasm/src \
-		-w loxint/src \
-		-s 'cd .. && make build-wasm && cd playground && npm test'
 
 # Clean build artifacts
 clean:
