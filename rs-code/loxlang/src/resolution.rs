@@ -30,7 +30,7 @@ pub struct ResolutionError {
     #[source_code]
     src: String,
     #[label("Unknown variable")]
-    span: SourceSpan,
+    pub(crate) span: SourceSpan,
     #[help]
     help: String,
 }

@@ -4,12 +4,11 @@ use loxlang::execution_env::Value;
 use loxlang::parse;
 use loxlang::resolution::resolve;
 use loxlang::resolution::resolve_expr_no_var;
+use loxlang::LoxError;
 use miette::Diagnostic;
-use miette::NarratableReportHandler;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen::JsValue;
 
 /// Span information indicating where an error occurred in the source code
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -33,6 +32,29 @@ pub struct ErrorInfo {
     pub error_type: String,
 }
 
+impl From<LoxError> for ErrorInfo {
+    fn from(error: LoxError) -> Self {
+        let error_type = match &error {
+            LoxError::LexicalError(_) => "lexical",
+            LoxError::ParseError(_) => "parse",
+            LoxError::ResolutionError(_) => "resolution",
+            LoxError::RuntimeError(_) => "runtime",
+        };
+        let span = error.span();
+
+        ErrorInfo {
+            message: error
+                .help()
+                .map_or("Error".to_string(), |e| format!("{}", e)),
+            span: ErrorSpan {
+                start: span.offset(),
+                end: span.offset() + span.len(),
+            },
+            error_type: error_type.to_string(),
+        }
+    }
+}
+
 /// Result type for Lox operations
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
@@ -42,78 +64,36 @@ pub enum LoxResult<T> {
     Error(ErrorInfo),
 }
 
-#[derive(Debug)]
-pub struct LoxError(String);
-
-impl From<LoxError> for JsValue {
-    fn from(error: LoxError) -> Self {
-        JsValue::from_str(error.0.as_str())
-    }
-}
-
-impl<T: Diagnostic> From<T> for LoxError {
-    fn from(error: T) -> Self {
-        let mut output = String::new();
-        NarratableReportHandler::new()
-            .render_report(&mut output, &error)
-            .unwrap();
-        LoxError(output)
-    }
-}
-
-/// Helper function to convert a Diagnostic error into ErrorInfo
-fn diagnostic_to_error_info<T: Diagnostic>(error: T, error_type: &str) -> ErrorInfo {
-    let mut output = String::new();
-    NarratableReportHandler::new()
-        .render_report(&mut output, &error)
-        .unwrap();
-
-    // Extract span information from the error's labels
-    let span = if let Some(labels) = error.labels() {
-        if let Some(label) = labels.into_iter().next() {
-            let span = label.inner();
-            ErrorSpan {
-                start: span.offset(),
-                end: span.offset() + span.len(),
-            }
-        } else {
-            ErrorSpan { start: 0, end: 0 }
-        }
-    } else {
-        ErrorSpan { start: 0, end: 0 }
-    };
-
-    ErrorInfo {
-        message: output,
-        span,
-        error_type: error_type.to_string(),
-    }
-}
-
 #[wasm_bindgen]
 pub fn eval_expr(src: String) -> LoxResult<f64> {
-    let tokens = match parse::scanner::parse_tokens(&src) {
-        Ok(tokens) => tokens,
-        Err(e) => return LoxResult::Error(diagnostic_to_error_info(e, "lexical")),
-    };
+    match eval_expr_inner(&src) {
+        Ok(Value::Atomic(AtomicValue::Number(x))) => LoxResult::Success(x),
+        Ok(Value::Atomic(x)) => LoxResult::Error(ErrorInfo {
+            message: format!("Expected number, got another value {}", x),
+            span: ErrorSpan { start: 0, end: src.len() },
+            error_type: "type".to_string(),
+        }),
+        Ok(Value::Function(_)) | Ok(Value::NativeFunction(_)) => LoxResult::Error(ErrorInfo {
+            message: "Expected number, got a function".to_string(),
+            span: ErrorSpan { start: 0, end: src.len() },
+            error_type: "type".to_string(),
+        }),
+        Err(e) => LoxResult::Error(e.into()),
+    }
+}
 
+fn eval_expr_inner(src: &str) -> Result<Value<'_>, LoxError> {
+    let tokens = parse::scanner::parse_tokens(&src)?;
     let mut p = parse::Parser::new(&src, &tokens);
-    let e = match p.parse_expr() {
-        Ok(e) => e,
-        Err(e) => return LoxResult::Error(diagnostic_to_error_info(e, "parse")),
-    };
-
-    let e = match resolve_expr_no_var(e, &src) {
-        Ok(e) => e,
-        Err(e) => return LoxResult::Error(diagnostic_to_error_info(e, "resolution")),
-    };
+    let e = p.parse_expr()?;
+    let e = resolve_expr_no_var(e, &src)?;
 
     if !p.done() {
-        return LoxResult::Error(ErrorInfo {
-            message: "Unparsed tokens remaining".to_string(),
-            span: ErrorSpan { start: 0, end: 0 },
-            error_type: "parse".to_string(),
-        });
+        return Err(LoxError::ParseError(parse::ParseError::UnexpectedEnd {
+            span: src.len().into(),
+            src: src.to_string(),
+            help: "Unparsed tokens remaining".to_string(),
+        }));
     }
 
     let deps = TestDeps {
@@ -122,33 +102,22 @@ pub fn eval_expr(src: String) -> LoxResult<f64> {
     let env = loxlang::execution_env::ExecEnv::new(deps);
     let mut runtime = loxlang::runtime::Runtime::new(env);
 
-    match runtime.eval(&e) {
-        Ok(Value::Atomic(AtomicValue::Number(x))) => LoxResult::Success(x),
-        Err(e) => LoxResult::Error(diagnostic_to_error_info(e, "runtime")),
-        _ => LoxResult::Error(ErrorInfo {
-            message: "Expected number, got non-number value".to_string(),
-            span: ErrorSpan { start: 0, end: 0 },
-            error_type: "type".to_string(),
-        }),
-    }
+    let x = runtime.eval(&e)?;
+    Ok(x)
 }
 
 #[wasm_bindgen]
 pub fn run_program(src: String) -> LoxResult<Vec<String>> {
-    let tokens = match parse::scanner::parse_tokens(&src) {
-        Ok(tokens) => tokens,
-        Err(e) => return LoxResult::Error(diagnostic_to_error_info(e, "lexical")),
-    };
+    match run_program_inner(&src) {
+        Ok(out) => LoxResult::Success(out),
+        Err(e) => LoxResult::Error(e.into()),
+    }
+}
 
-    let program = match parse::Parser::new(&src, &tokens).parse_program() {
-        Ok(program) => program,
-        Err(e) => return LoxResult::Error(diagnostic_to_error_info(e, "parse")),
-    };
-
-    let program = match resolve(program, &src) {
-        Ok(program) => program,
-        Err(e) => return LoxResult::Error(diagnostic_to_error_info(e, "resolution")),
-    };
+fn run_program_inner(src: &str) -> Result<Vec<String>, LoxError> {
+    let tokens = parse::scanner::parse_tokens(&src)?;
+    let program = parse::Parser::new(&src, &tokens).parse_program()?;
+    let program = resolve(program, &src)?;
 
     let deps = TestDeps {
         printed: Vec::new(),
@@ -156,10 +125,8 @@ pub fn run_program(src: String) -> LoxResult<Vec<String>> {
     let env = loxlang::execution_env::ExecEnv::new(deps);
     let mut runtime = loxlang::runtime::Runtime::new(env);
 
-    match runtime.run_program(&program) {
-        Ok(_) => LoxResult::Success(runtime.into_deps().printed),
-        Err(e) => LoxResult::Error(diagnostic_to_error_info(e, "runtime")),
-    }
+    runtime.run_program(&program)?;
+    Ok(runtime.into_deps().printed)
 }
 
 struct TestDeps {

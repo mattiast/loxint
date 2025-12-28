@@ -24,6 +24,18 @@ pub enum LoxError {
     RuntimeError(#[from] runtime::RuntimeError),
 }
 
+impl LoxError {
+    pub fn span(&self) -> miette::SourceSpan {
+        match self {
+            LoxError::LexicalError(e) => e.source_offset.into() ,
+            LoxError::ParseError(parse::ParseError::UnexpectedToken {span, ..}) => *span,
+            LoxError::ParseError(parse::ParseError::UnexpectedEnd {span, ..}) => (*span).into(),
+            LoxError::ResolutionError(e) => e.span,
+            LoxError::RuntimeError(e) => e.source_offset.into(),
+        }
+    }
+}
+
 pub fn parse_program(source: &str) -> Result<RunnableProgram<'_>, LoxError> {
     let tokens = parse::scanner::parse_tokens(source)?;
     let program = parse::Parser::new(source, &tokens).parse_program()?;
