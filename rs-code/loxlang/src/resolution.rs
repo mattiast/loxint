@@ -32,7 +32,7 @@ pub struct ResolutionError {
     #[label("Unknown variable")]
     pub(crate) span: SourceSpan,
     #[help]
-    help: String,
+    pub(crate) help: String,
 }
 
 pub fn resolve<'src>(
