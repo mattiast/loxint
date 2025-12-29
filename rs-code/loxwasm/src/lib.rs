@@ -5,7 +5,6 @@ use loxlang::parse;
 use loxlang::resolution::resolve;
 use loxlang::resolution::resolve_expr_no_var;
 use loxlang::LoxError;
-use miette::Diagnostic;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -43,9 +42,7 @@ impl From<LoxError> for ErrorInfo {
         let span = error.span();
 
         ErrorInfo {
-            message: error
-                .help()
-                .map_or("Error".to_string(), |e| format!("{}", e)),
+            message: error.message(),
             span: ErrorSpan {
                 start: span.offset(),
                 end: span.offset() + span.len(),

@@ -102,7 +102,7 @@ function executeMultiLine(): void {
       from: error.span.start,
       to: error.span.end,
       severity: 'error',
-      message: error.message
+      message: `${error.error_type} error: ${error.message}`
     };
     multiLineEditor.dispatch(setDiagnostics(multiLineEditor.state, [diagnostic]));
   }

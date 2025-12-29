@@ -27,11 +27,22 @@ pub enum LoxError {
 impl LoxError {
     pub fn span(&self) -> miette::SourceSpan {
         match self {
-            LoxError::LexicalError(e) => e.source_offset.into() ,
-            LoxError::ParseError(parse::ParseError::UnexpectedToken {span, ..}) => *span,
-            LoxError::ParseError(parse::ParseError::UnexpectedEnd {span, ..}) => (*span).into(),
+            LoxError::LexicalError(e) => e.source_offset.into(),
+            LoxError::ParseError(parse::ParseError::UnexpectedToken { span, .. }) => *span,
+            LoxError::ParseError(parse::ParseError::UnexpectedEnd { span, .. }) => (*span).into(),
             LoxError::ResolutionError(e) => e.span,
             LoxError::RuntimeError(e) => e.source_offset.into(),
+        }
+    }
+    pub fn message(&self) -> String {
+        match self {
+            LoxError::LexicalError(_) => format!("No valid token"),
+            LoxError::ParseError(parse::ParseError::UnexpectedToken { help, .. }) => format!("Parse error:\n{}", help),
+            LoxError::ParseError(parse::ParseError::UnexpectedEnd { help, .. }) => {
+                format!("Unexpected end of input:\n{}", help)
+            }
+            LoxError::ResolutionError(e) => format!("{}", e.help),
+            LoxError::RuntimeError(e) => format!("{}", e.msg),
         }
     }
 }
