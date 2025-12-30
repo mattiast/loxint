@@ -9,7 +9,7 @@ type ParsedExpression<'src> = AnnotatedExpression<'src, &'src str, ByteSpan>;
 
 /// Token type for our lexer
 #[derive(Clone, Debug, PartialEq)]
-enum Token<'a> {
+pub enum Token<'a> {
     Number(f64),
     String(&'a str),
     True,

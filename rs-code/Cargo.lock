@@ -330,6 +330,7 @@ dependencies = [
 name = "loxwasm"
 version = "0.1.0"
 dependencies = [
+ "chumsky",
  "loxlang",
  "miette",
  "serde",
