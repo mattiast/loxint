@@ -92,6 +92,7 @@ fn eval_expr_inner(src: &str) -> Result<Value<'_>, LoxError> {
             // Take the first error
             let err = errors.into_iter().next().unwrap();
             let span = err.span();
+            // TODO integrate these errors with LoxError to simplify this
             LoxError::LexicalError(parse::scanner::LexicalError {
                 src: src.to_string(),
                 source_offset: span.start.into(),

@@ -59,7 +59,10 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<(Token<'a>, SimpleSpan)>, ext
     let number = text::int(10)
         .then(just('.').then(text::digits(10)).or_not())
         .to_slice()
-        .map(|s: &str| Token::Number(s.parse().unwrap()))
+        .from_str::<f64>()
+        // TODO a better way to parse numbers with error handling
+        .unwrapped()
+        .map(Token::Number)
         .labelled("number");
 
     let string = just('"')
