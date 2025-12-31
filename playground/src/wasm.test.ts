@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { eval_expr_chumsky, LoxResult, run_program } from '../loxwasm-pkg/loxwasm';
+import { eval_expr, LoxResult, run_program } from '../loxwasm-pkg/loxwasm';
 
 describe('WASM Module Integration', () => {
     it('should evaluate simple arithmetic expressions', async () => {
-        const result = eval_expr_chumsky('1 + 2') as LoxResult<number>;
+        const result = eval_expr('1 + 2') as LoxResult<number>;
         expect(result).toStrictEqual({ type: 'Success', value: 3 });
     });
 
@@ -14,7 +14,7 @@ describe('WASM Module Integration', () => {
     });
 
     it('should throw errors for invalid syntax', async () => {
-        const result = eval_expr_chumsky('1 +');
+        const result = eval_expr('1 +');
         expect(result.type).toBe('Error');
     });
 });
