@@ -17,6 +17,18 @@ pub enum Token<'a> {
     Nil,
     Ident(&'a str),
 
+    // Keywords
+    Print,
+    Var,
+    If,
+    Else,
+    While,
+    For,
+    Fun,
+    Return,
+    And,
+    Or,
+
     // Operators
     Plus,
     Minus,
@@ -26,6 +38,10 @@ pub enum Token<'a> {
     // Delimiters
     LParen,
     RParen,
+    LBrace,
+    RBrace,
+    Semicolon,
+    Comma,
 
     // Comparison
     Equal,
@@ -70,12 +86,26 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<(Token<'a>, SimpleSpan)>, ext
     let delimiter = choice((
         just('(').to(Token::LParen),
         just(')').to(Token::RParen),
+        just('{').to(Token::LBrace),
+        just('}').to(Token::RBrace),
+        just(';').to(Token::Semicolon),
+        just(',').to(Token::Comma),
     ));
 
     let keyword = text::ascii::ident().map(|s: &str| match s {
         "true" => Token::True,
         "false" => Token::False,
         "nil" => Token::Nil,
+        "print" => Token::Print,
+        "var" => Token::Var,
+        "if" => Token::If,
+        "else" => Token::Else,
+        "while" => Token::While,
+        "for" => Token::For,
+        "fun" => Token::Fun,
+        "return" => Token::Return,
+        "and" => Token::And,
+        "or" => Token::Or,
         _ => Token::Ident(s),
     });
 
@@ -128,14 +158,32 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
 
         let lparen = select! { (Token::LParen, _) => () };
         let rparen = select! { (Token::RParen, _) => () };
+        let comma = select! { (Token::Comma, _) => () };
 
         let atom = choice((
             literal,
             ident,
             expr.clone()
-                .delimited_by(lparen, rparen)
+                .delimited_by(lparen.clone(), rparen.clone())
                 .labelled("parenthesized expression"),
         ));
+
+        // Function calls: foo(arg1, arg2, ...)
+        let arg_list = expr
+            .clone()
+            .separated_by(comma)
+            .collect::<Vec<_>>()
+            .delimited_by(lparen, rparen);
+
+        let call = atom
+            .clone()
+            .foldl(arg_list.repeated(), |func, args| {
+                let start = func.annotation.start;
+                let end = func.annotation.end;
+                Expression::FunctionCall(Box::new(func), args)
+                    .annotate(ByteSpan { start, end })
+            })
+            .boxed();
 
         // Unary: -expr, !expr
         let unary_op = select! {
@@ -144,7 +192,7 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
         };
 
         let unary = unary_op
-            .then(atom.clone())
+            .then(call.clone())
             .map(|(op, right)| {
                 let start = right.annotation.start;
                 let end = right.annotation.end;
@@ -154,7 +202,7 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
                 }
                 .annotate(ByteSpan { start, end })
             })
-            .or(atom)
+            .or(call)
             .boxed();
 
         // Factor: * /
@@ -248,10 +296,237 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
                     }
                     .annotate(ByteSpan { start, end })
                 },
-            );
+            )
+            .boxed();
 
-        equality
+        // Logical and
+        let logic_and_op = select! {
+            (Token::And, _) => BOperator::AND,
+        };
+
+        let logic_and = equality
+            .clone()
+            .foldl(
+                logic_and_op.then(equality).repeated(),
+                |left, (op, right)| {
+                    let start = left.annotation.start;
+                    let end = right.annotation.end;
+                    Expression::Binary {
+                        left: Box::new(left),
+                        operator: op,
+                        right: Box::new(right),
+                    }
+                    .annotate(ByteSpan { start, end })
+                },
+            )
+            .boxed();
+
+        // Logical or
+        let logic_or_op = select! {
+            (Token::Or, _) => BOperator::OR,
+        };
+
+        let logic_or = logic_and
+            .clone()
+            .foldl(
+                logic_or_op.then(logic_and).repeated(),
+                |left, (op, right)| {
+                    let start = left.annotation.start;
+                    let end = right.annotation.end;
+                    Expression::Binary {
+                        left: Box::new(left),
+                        operator: op,
+                        right: Box::new(right),
+                    }
+                    .annotate(ByteSpan { start, end })
+                },
+            )
+            .boxed();
+
+        // Assignment: x = expr (right-associative)
+        let equal = select! { (Token::Equal, _) => () };
+
+        let assignment = logic_or
+            .clone()
+            .then(equal.ignore_then(expr.clone()).or_not())
+            .map(|(target, value)| {
+                if let Some(val) = value {
+                    // This is an assignment
+                    if let Expression::Identifier(var) = target.value {
+                        let start = target.annotation.start;
+                        let end = val.annotation.end;
+                        Expression::Assignment(var, Box::new(val))
+                            .annotate(ByteSpan { start, end })
+                    } else {
+                        // Invalid assignment target, but we'll let this parse
+                        // and catch it in a later pass
+                        target
+                    }
+                } else {
+                    target
+                }
+            });
+
+        assignment
     })
+}
+
+type ParsedStatement<'src> = AnnotatedStatement<'src, &'src str, &'src str, ByteSpan>;
+type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str, ByteSpan>;
+
+/// Parser for statements and declarations (combined to avoid mutual recursion issues)
+pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
+    'a,
+    &'a [(Token<'src>, SimpleSpan)],
+    ParsedDeclaration<'src>,
+    extra::Err<Simple<'a, (Token<'src>, SimpleSpan)>>,
+> + Clone {
+    recursive(|decl| {
+        let expr = expr_parser();
+        let semicolon = select! { (Token::Semicolon, _) => () };
+        let equal = select! { (Token::Equal, _) => () };
+        let comma = select! { (Token::Comma, _) => () };
+        let lparen = select! { (Token::LParen, _) => () };
+        let rparen = select! { (Token::RParen, _) => () };
+        let lbrace = select! { (Token::LBrace, _) => () };
+        let rbrace = select! { (Token::RBrace, _) => () };
+
+        let ident = select! {
+            (Token::Ident(s), _) => s,
+        };
+
+        // Statements (defined inline to avoid mutual recursion)
+        let stmt = recursive(|stmt| {
+            // Print statement
+            let print_stmt = select! { (Token::Print, _) => () }
+                .ignore_then(expr.clone())
+                .then_ignore(semicolon.clone())
+                .map(|e| Statement::Print(e).annotate(ByteSpan { start: 0, end: 0 }));
+
+            // Return statement
+            let return_stmt = select! { (Token::Return, _) => () }
+                .ignore_then(expr.clone())
+                .then_ignore(semicolon.clone())
+                .map(|e| Statement::Return(e).annotate(ByteSpan { start: 0, end: 0 }));
+
+            // Expression statement
+            let expr_stmt = expr.clone()
+                .then_ignore(semicolon.clone())
+                .map(|e| Statement::Expression(e).annotate(ByteSpan { start: 0, end: 0 }));
+
+            // Block statement
+            let block = decl
+                .clone()
+                .repeated()
+                .collect()
+                .delimited_by(lbrace.clone(), rbrace.clone())
+                .map(|decls| Statement::Block(decls).annotate(ByteSpan { start: 0, end: 0 }));
+
+            // If statement
+            let if_stmt = select! { (Token::If, _) => () }
+                .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
+                .then(stmt.clone())
+                .then(select! { (Token::Else, _) => () }.ignore_then(stmt.clone()).or_not())
+                .map(|((cond, then_branch), else_branch)| {
+                    Statement::If(
+                        cond,
+                        Box::new(then_branch),
+                        else_branch.map(Box::new),
+                    )
+                    .annotate(ByteSpan { start: 0, end: 0 })
+                });
+
+            // While statement
+            let while_stmt = select! { (Token::While, _) => () }
+                .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
+                .then(stmt.clone())
+                .map(|(cond, body)| {
+                    Statement::While(cond, Box::new(body)).annotate(ByteSpan { start: 0, end: 0 })
+                });
+
+            choice((
+                print_stmt,
+                return_stmt,
+                if_stmt,
+                while_stmt,
+                block,
+                expr_stmt,
+            ))
+        });
+
+        // Variable declaration
+        let var_decl = select! { (Token::Var, _) => () }
+            .ignore_then(ident.clone())
+            .then(equal.ignore_then(expr.clone()).or_not())
+            .then_ignore(semicolon.clone())
+            .map(|(name, init)| {
+                Declaration::Var(VariableDecl(name), init)
+            });
+
+        // Function declaration
+        let param_list = ident
+            .clone()
+            .separated_by(comma)
+            .collect::<Vec<_>>()
+            .delimited_by(lparen.clone(), rparen.clone());
+
+        let fun_decl = select! { (Token::Fun, _) => () }
+            .ignore_then(ident.clone())
+            .then(param_list)
+            .then(stmt.clone())
+            .map(|((name, args), body)| {
+                Declaration::Function {
+                    name: VariableDecl(name),
+                    args: args.into_iter().map(VariableDecl).collect(),
+                    body,
+                }
+            });
+
+        // Statement as declaration
+        let stmt_decl = stmt.map(Declaration::Statement);
+
+        choice((
+            var_decl,
+            fun_decl,
+            stmt_decl,
+        ))
+    })
+}
+
+/// Parser for statements (wrapper that parses any declaration but returns statement)
+pub fn stmt_parser<'a, 'src: 'a>() -> impl Parser<
+    'a,
+    &'a [(Token<'src>, SimpleSpan)],
+    ParsedStatement<'src>,
+    extra::Err<Simple<'a, (Token<'src>, SimpleSpan)>>,
+> + Clone {
+    decl_parser().map(|decl| match decl {
+        Declaration::Statement(stmt) => stmt,
+        Declaration::Var(_name, init) => {
+            // Wrap var declaration as expression statement for testing purposes
+            let expr = init.unwrap_or_else(|| Expression::Nil.annotate(ByteSpan { start: 0, end: 0 }));
+            Statement::Expression(expr).annotate(ByteSpan { start: 0, end: 0 })
+        }
+        Declaration::Function { .. } => {
+            // Wrap function as expression statement for testing purposes
+            Statement::Expression(Expression::Nil.annotate(ByteSpan { start: 0, end: 0 }))
+                .annotate(ByteSpan { start: 0, end: 0 })
+        }
+    })
+}
+
+/// Parser for a full program
+pub fn program_parser<'a, 'src: 'a>() -> impl Parser<
+    'a,
+    &'a [(Token<'src>, SimpleSpan)],
+    Program<'src, &'src str, &'src str, ByteSpan>,
+    extra::Err<Simple<'a, (Token<'src>, SimpleSpan)>>,
+> {
+    decl_parser()
+        .repeated()
+        .collect()
+        .map(|decls| Program { decls })
+        .then_ignore(end())
 }
 
 #[cfg(test)]
@@ -440,5 +715,163 @@ mod tests {
 
             println!("{:20} => {}", src, ast.unwrap().value.pretty_print());
         }
+    }
+
+    #[test]
+    fn test_parser_function_call() {
+        let src = "foo(1, 2, 3)";
+        let tokens = lexer().parse(src).unwrap();
+        let ast = expr_parser().parse(&tokens).unwrap();
+
+        if let Expression::FunctionCall(func, args) = ast.value {
+            assert!(matches!(func.value, Expression::Identifier(_)));
+            assert_eq!(args.len(), 3);
+        } else {
+            panic!("Expected function call");
+        }
+    }
+
+    #[test]
+    fn test_parser_assignment() {
+        let src = "x = 5";
+        let tokens = lexer().parse(src).unwrap();
+        let ast = expr_parser().parse(&tokens).unwrap();
+
+        if let Expression::Assignment(var, val) = ast.value {
+            assert_eq!(var.0, "x");
+            assert!(matches!(val.value, Expression::NumberLiteral(5.0)));
+        } else {
+            panic!("Expected assignment");
+        }
+    }
+
+    #[test]
+    fn test_parser_logical_operators() {
+        let src = "true and false or true";
+        let tokens = lexer().parse(src).unwrap();
+        let ast = expr_parser().parse(&tokens).unwrap();
+
+        // Should parse as: (true and false) or true
+        if let Expression::Binary { left, operator, right } = ast.value {
+            assert_eq!(operator, BOperator::OR);
+            assert!(matches!(right.value, Expression::BooleanLiteral(true)));
+
+            if let Expression::Binary { left: left2, operator: op2, right: right2 } = left.value {
+                assert_eq!(op2, BOperator::AND);
+                assert!(matches!(left2.value, Expression::BooleanLiteral(true)));
+                assert!(matches!(right2.value, Expression::BooleanLiteral(false)));
+            } else {
+                panic!("Expected binary expression on left side");
+            }
+        } else {
+            panic!("Expected binary expression");
+        }
+    }
+
+    #[test]
+    fn test_stmt_print() {
+        let src = "print 42;";
+        let tokens = lexer().parse(src).unwrap();
+        let ast = stmt_parser().parse(&tokens).unwrap();
+
+        if let Statement::Print(expr) = ast.value {
+            assert!(matches!(expr.value, Expression::NumberLiteral(42.0)));
+        } else {
+            panic!("Expected print statement");
+        }
+    }
+
+    #[test]
+    fn test_stmt_var_decl() {
+        let src = "var x = 10;";
+        let tokens = lexer().parse(src).unwrap();
+        let ast = decl_parser().parse(&tokens).unwrap();
+
+        if let Declaration::Var(var, Some(expr)) = ast {
+            assert_eq!(var.0, "x");
+            assert!(matches!(expr.value, Expression::NumberLiteral(10.0)));
+        } else {
+            panic!("Expected variable declaration");
+        }
+    }
+
+    #[test]
+    fn test_stmt_if() {
+        let src = "if (x < 5) print \"small\";";
+        let tokens = lexer().parse(src).unwrap();
+        let ast = stmt_parser().parse(&tokens).unwrap();
+
+        if let Statement::If(cond, then_branch, else_branch) = ast.value {
+            assert!(matches!(cond.value, Expression::Binary { .. }));
+            assert!(matches!(then_branch.value, Statement::Print(_)));
+            assert!(else_branch.is_none());
+        } else {
+            panic!("Expected if statement");
+        }
+    }
+
+    #[test]
+    fn test_program_simple() {
+        let src = r#"
+            var x = 10;
+            print x;
+        "#;
+        let tokens = lexer().parse(src).unwrap();
+        let program = program_parser().parse(&tokens).unwrap();
+
+        assert_eq!(program.decls.len(), 2);
+        assert!(matches!(program.decls[0], Declaration::Var(_, _)));
+        if let Declaration::Statement(stmt) = &program.decls[1] {
+            assert!(matches!(stmt.value, Statement::Print(_)));
+        } else {
+            panic!("Expected statement");
+        }
+    }
+
+    #[test]
+    fn test_program_function() {
+        let src = r#"
+            fun add(a, b) {
+                return a + b;
+            }
+            print add(2, 3);
+        "#;
+        let tokens = lexer().parse(src).unwrap();
+        let program = program_parser().parse(&tokens).unwrap();
+
+        assert_eq!(program.decls.len(), 2);
+
+        if let Declaration::Function { name, args, body } = &program.decls[0] {
+            assert_eq!(name.0, "add");
+            assert_eq!(args.len(), 2);
+            assert!(matches!(body.value, Statement::Block(_)));
+        } else {
+            panic!("Expected function declaration");
+        }
+    }
+
+    #[test]
+    fn test_program_full_example() {
+        let src = r#"
+            fun fibonacci(n) {
+                if (n < 2) {
+                    return n;
+                } else {
+                    return fibonacci(n - 1) + fibonacci(n - 2);
+                }
+            }
+
+            var i = 0;
+            while (i < 10) {
+                print fibonacci(i);
+                i = i + 1;
+            }
+        "#;
+        let tokens = lexer().parse(src).unwrap();
+        let result = program_parser().parse(&tokens).into_result();
+
+        assert!(result.is_ok(), "Failed to parse fibonacci program");
+        let program = result.unwrap();
+        assert_eq!(program.decls.len(), 3); // function, var, while
     }
 }
