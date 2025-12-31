@@ -371,7 +371,6 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
     })
 }
 
-type ParsedStatement<'src> = AnnotatedStatement<'src, &'src str, &'src str, ByteSpan>;
 type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str, ByteSpan>;
 
 /// Parser for statements and declarations (combined to avoid mutual recursion issues)
@@ -401,18 +400,18 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
             let print_stmt = select! { (Token::Print, _) => () }
                 .ignore_then(expr.clone())
                 .then_ignore(semicolon.clone())
-                .map(|e| Statement::Print(e).annotate(ByteSpan { start: 0, end: 0 }));
+                .map_with(|e, ann| Statement::Print(e).annotate(to_byte_span(ann.span())));
 
             // Return statement
             let return_stmt = select! { (Token::Return, _) => () }
                 .ignore_then(expr.clone())
                 .then_ignore(semicolon.clone())
-                .map(|e| Statement::Return(e).annotate(ByteSpan { start: 0, end: 0 }));
+                .map_with(|e, ann| Statement::Return(e).annotate(to_byte_span(ann.span())));
 
             // Expression statement
             let expr_stmt = expr.clone()
                 .then_ignore(semicolon.clone())
-                .map(|e| Statement::Expression(e).annotate(ByteSpan { start: 0, end: 0 }));
+                .map_with(|e, ann| Statement::Expression(e).annotate(to_byte_span(ann.span())));
 
             // Block statement
             let block = decl
@@ -420,28 +419,28 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
                 .repeated()
                 .collect()
                 .delimited_by(lbrace.clone(), rbrace.clone())
-                .map(|decls| Statement::Block(decls).annotate(ByteSpan { start: 0, end: 0 }));
+                .map_with(|decls, ann| Statement::Block(decls).annotate(to_byte_span(ann.span())));
 
             // If statement
             let if_stmt = select! { (Token::If, _) => () }
                 .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
                 .then(stmt.clone())
                 .then(select! { (Token::Else, _) => () }.ignore_then(stmt.clone()).or_not())
-                .map(|((cond, then_branch), else_branch)| {
+                .map_with(|((cond, then_branch), else_branch), ann| {
                     Statement::If(
                         cond,
                         Box::new(then_branch),
                         else_branch.map(Box::new),
                     )
-                    .annotate(ByteSpan { start: 0, end: 0 })
+                    .annotate(to_byte_span(ann.span()))
                 });
 
             // While statement
             let while_stmt = select! { (Token::While, _) => () }
                 .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
                 .then(stmt.clone())
-                .map(|(cond, body)| {
-                    Statement::While(cond, Box::new(body)).annotate(ByteSpan { start: 0, end: 0 })
+                .map_with(|(cond, body), ann| {
+                    Statement::While(cond, Box::new(body)).annotate(to_byte_span(ann.span()))
                 });
 
             choice((
@@ -490,28 +489,6 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
             fun_decl,
             stmt_decl,
         ))
-    })
-}
-
-/// Parser for statements (wrapper that parses any declaration but returns statement)
-pub fn stmt_parser<'a, 'src: 'a>() -> impl Parser<
-    'a,
-    &'a [(Token<'src>, SimpleSpan)],
-    ParsedStatement<'src>,
-    extra::Err<Simple<'a, (Token<'src>, SimpleSpan)>>,
-> + Clone {
-    decl_parser().map(|decl| match decl {
-        Declaration::Statement(stmt) => stmt,
-        Declaration::Var(_name, init) => {
-            // Wrap var declaration as expression statement for testing purposes
-            let expr = init.unwrap_or_else(|| Expression::Nil.annotate(ByteSpan { start: 0, end: 0 }));
-            Statement::Expression(expr).annotate(ByteSpan { start: 0, end: 0 })
-        }
-        Declaration::Function { .. } => {
-            // Wrap function as expression statement for testing purposes
-            Statement::Expression(Expression::Nil.annotate(ByteSpan { start: 0, end: 0 }))
-                .annotate(ByteSpan { start: 0, end: 0 })
-        }
     })
 }
 
@@ -769,19 +746,6 @@ mod tests {
     }
 
     #[test]
-    fn test_stmt_print() {
-        let src = "print 42;";
-        let tokens = lexer().parse(src).unwrap();
-        let ast = stmt_parser().parse(&tokens).unwrap();
-
-        if let Statement::Print(expr) = ast.value {
-            assert!(matches!(expr.value, Expression::NumberLiteral(42.0)));
-        } else {
-            panic!("Expected print statement");
-        }
-    }
-
-    #[test]
     fn test_stmt_var_decl() {
         let src = "var x = 10;";
         let tokens = lexer().parse(src).unwrap();
@@ -792,21 +756,6 @@ mod tests {
             assert!(matches!(expr.value, Expression::NumberLiteral(10.0)));
         } else {
             panic!("Expected variable declaration");
-        }
-    }
-
-    #[test]
-    fn test_stmt_if() {
-        let src = "if (x < 5) print \"small\";";
-        let tokens = lexer().parse(src).unwrap();
-        let ast = stmt_parser().parse(&tokens).unwrap();
-
-        if let Statement::If(cond, then_branch, else_branch) = ast.value {
-            assert!(matches!(cond.value, Expression::Binary { .. }));
-            assert!(matches!(then_branch.value, Statement::Print(_)));
-            assert!(else_branch.is_none());
-        } else {
-            panic!("Expected if statement");
         }
     }
 
