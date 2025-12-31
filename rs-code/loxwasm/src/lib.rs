@@ -105,10 +105,25 @@ fn eval_expr_inner(src: &str) -> Result<Value<'_>, LoxError> {
         .map_err(|errors| {
             // Take the first error
             let err = errors.into_iter().next().unwrap();
-            let span = err.span();
+            let token_span = err.span();
+
+            // Map token indices to character positions
+            let char_span = if token_span.start < tokens.len() {
+                let start_char = tokens[token_span.start].1.start;
+                let end_char = if token_span.end <= tokens.len() && token_span.end > 0 {
+                    tokens[token_span.end - 1].1.end
+                } else {
+                    tokens[token_span.start].1.end
+                };
+                miette::SourceSpan::new(start_char.into(), end_char - start_char)
+            } else {
+                // If the span is beyond the tokens, use the end of the source
+                miette::SourceSpan::new(src.len().into(), 0)
+            };
+
             LoxError::ParseError(parse::ParseError::UnexpectedToken {
                 src: src.to_string(),
-                span: miette::SourceSpan::new(span.start.into(), span.end - span.start),
+                span: char_span,
                 help: format!("Unexpected token while parsing expression"),
             })
         })?;
@@ -159,10 +174,25 @@ fn run_program_inner(src: &str) -> Result<Vec<String>, LoxError> {
         .map_err(|errors| {
             // Take the first error
             let err = errors.into_iter().next().unwrap();
-            let span = err.span();
+            let token_span = err.span();
+
+            // Map token indices to character positions
+            let char_span = if token_span.start < tokens.len() {
+                let start_char = tokens[token_span.start].1.start;
+                let end_char = if token_span.end <= tokens.len() && token_span.end > 0 {
+                    tokens[token_span.end - 1].1.end
+                } else {
+                    tokens[token_span.start].1.end
+                };
+                miette::SourceSpan::new(start_char.into(), end_char - start_char)
+            } else {
+                // If the span is beyond the tokens, use the end of the source
+                miette::SourceSpan::new(src.len().into(), 0)
+            };
+
             LoxError::ParseError(parse::ParseError::UnexpectedToken {
                 src: src.to_string(),
-                span: miette::SourceSpan::new(span.start.into(), span.end - span.start),
+                span: char_span,
                 help: format!("Unexpected token while parsing program"),
             })
         })?;
@@ -266,6 +296,23 @@ mod tests {
         match eval_expr("(2 + 3) * 4 - 5 / 2".to_string()) {
             LoxResult::Success(x) => assert_eq!(x, 17.5),
             LoxResult::Error(e) => panic!("Failed to evaluate: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_parse_error_span_is_character_based() {
+        // Test that parse error spans point to character positions, not token indices
+        // Create a parse error: "1 + 2 + )" - the closing paren is unexpected
+        let src = "1 + 2 + )";
+        match eval_expr(src.to_string()) {
+            LoxResult::Success(_) => panic!("Expected parse error but got success"),
+            LoxResult::Error(e) => {
+                // The error should be at the ')' character
+                // Position: "1 + 2 + )" -> index 8
+                // If it was using token indices, it would point to much earlier (token 6)
+                assert_eq!(e.error_type, "parse");
+                assert_eq!(e.span.start, 8, "Parse error should point to character 8 (the ')'), not token index");
+            }
         }
     }
 }
