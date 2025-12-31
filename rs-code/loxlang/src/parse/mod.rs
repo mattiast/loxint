@@ -1,4 +1,5 @@
 pub mod scanner;
+pub mod chumsky_parser;
 use std::ops::{self, Range};
 
 use miette::{Diagnostic, SourceOffset};

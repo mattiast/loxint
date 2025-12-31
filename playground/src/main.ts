@@ -1,5 +1,5 @@
 // Import WASM module functions
-import { eval_expr, LoxResult, run_program } from '../loxwasm-pkg/loxwasm';
+import { eval_expr_chumsky, LoxResult, run_program } from '../loxwasm-pkg/loxwasm';
 import { formatResult, formatError, joinOutputLines } from './utils';
 
 // Import CodeMirror
@@ -65,7 +65,7 @@ function executeSingleLine(): void {
   const code = singleLineEditor.state.doc.toString();
     singleLineEditor.dispatch(setDiagnostics(singleLineEditor.state, []));
 
-    const result = eval_expr(code) as LoxResult<string>;
+    const result = eval_expr_chumsky(code) as LoxResult<string>;
     if (result.type === "Success") {
         output.value = formatResult(result.value);
         output.style.backgroundColor = '';

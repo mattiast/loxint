@@ -7,3 +7,4 @@ clap = { version = "4", features = ["derive"] }
 nom = "8"
 thiserror = "2"
 miette = "7"
+chumsky = "1.0.0-alpha.7"

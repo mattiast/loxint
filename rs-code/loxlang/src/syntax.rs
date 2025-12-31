@@ -67,13 +67,13 @@ pub struct Program<'a, VR, VD, Ann> {
     pub decls: Vec<Declaration<'a, VR, VD, Ann>>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UOperator {
     MINUS,
     BANG,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BOperator {
     PLUS,
     MINUS,
