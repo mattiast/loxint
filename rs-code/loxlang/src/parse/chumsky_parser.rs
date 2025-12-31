@@ -181,6 +181,7 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
         let call = atom
             .clone()
             .foldl(arg_list.repeated(), |func, args| {
+                // TODO span should include args
                 let start = func.annotation.start;
                 let end = func.annotation.end;
                 Expression::FunctionCall(Box::new(func), args)
@@ -361,8 +362,7 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
                         Expression::Assignment(var, Box::new(val))
                             .annotate(ByteSpan { start, end })
                     } else {
-                        // Invalid assignment target, but we'll let this parse
-                        // and catch it in a later pass
+                        // TODO this should fail parsing
                         target
                     }
                 } else {
@@ -445,6 +445,8 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
                 .map_with(|(cond, body), ann| {
                     Statement::While(cond, Box::new(body)).annotate(to_byte_span(ann.span()))
                 });
+
+            // TODO: For loop
 
             choice((
                 print_stmt,
