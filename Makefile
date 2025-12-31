@@ -28,6 +28,10 @@ test-ts: build-wasm
 	@echo "Running TypeScript tests..."
 	cd playground && npm test
 
+preview: build-wasm
+	@echo "Starting development server for preview..."
+	cd playground && npm run build && npm run preview -- --open
+
 # Clean build artifacts
 clean:
 	@echo "Cleaning Rust build artifacts..."
