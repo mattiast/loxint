@@ -8,3 +8,4 @@ nom.workspace = true
 thiserror.workspace = true
 miette.workspace = true
 chumsky.workspace = true
+regex.workspace = true

@@ -1,4 +1,4 @@
-.PHONY: help build-wasm test-ts clean
+.PHONY: help build-wasm test-ts clean download-tests
 
 MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 MKFILE_DIR := $(dir $(MKFILE_PATH))
@@ -10,6 +10,7 @@ help:
 	@echo "Available targets:"
 	@echo "  build-wasm    - Build Rust code to WebAssembly"
 	@echo "  test-ts       - Run TypeScript tests"
+	@echo "  download-tests- Download test cases from test-urls.txt"
 	@echo "  clean         - Clean build artifacts"
 
 # Build WASM from Rust code
@@ -31,6 +32,27 @@ test-ts: build-wasm
 preview: build-wasm
 	@echo "Starting development server for preview..."
 	cd playground && npm run build && npm run preview -- --open
+
+# Download test cases from URLs
+download-tests:
+	@echo "Downloading test cases..."
+	@mkdir -p test-cases
+	@if [ ! -f test-urls.txt ]; then \
+		echo "Error: test-urls.txt not found"; \
+		echo "Create test-urls.txt with one URL per line"; \
+		exit 1; \
+	fi
+	@while IFS= read -r url || [ -n "$$url" ]; do \
+		case "$$url" in \
+			""|"#"*) ;; \
+			*) \
+				filename=$$(basename "$$url"); \
+				echo "Downloading $$filename from $$url"; \
+				curl -sS -L "$$url" -o "test-cases/$$filename" || echo "Failed to download $$url"; \
+				;; \
+		esac; \
+	done < test-urls.txt
+	@echo "Download complete! Files saved to test-cases/"
 
 # Clean build artifacts
 clean:

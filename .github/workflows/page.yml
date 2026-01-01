@@ -24,6 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Download test cases
+        run: make download-tests
       - name: Run tests
         run: cargo test --workspace
         working-directory: ./rs-code

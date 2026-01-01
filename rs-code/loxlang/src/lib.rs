@@ -3,6 +3,7 @@ pub mod parse;
 pub mod resolution;
 pub mod runtime;
 pub mod syntax;
+pub mod test_runner;
 
 use miette::Diagnostic;
 pub use resolution::ResolvedProgram as RunnableProgram;

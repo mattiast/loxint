@@ -1,2 +1,5 @@
 # Rust build artifacts
 rs-code/target/
+
+# Downloaded test cases
+test-cases/

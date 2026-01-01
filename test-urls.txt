@@ -1,0 +1,16 @@
+# Test cases from Crafting Interpreters repository
+# Lines starting with # are ignored
+# Add one URL per line
+
+# Assignment tests
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/local.lox
+
+# Variable tests
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/in_middle_of_block.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/in_nested_block.lox
+
+# Expression tests
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/add.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/multiply.lox
+
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/closure_in_body.lox
