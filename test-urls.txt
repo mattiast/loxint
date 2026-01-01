@@ -1,16 +1,69 @@
-# Test cases from Crafting Interpreters repository
-# Lines starting with # are ignored
-# Add one URL per line
-
-# Assignment tests
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/associativity.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/global.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/local.lox
-
-# Variable tests
+# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/syntax.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/block/empty.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/block/scope.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/assign_to_closure.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/assign_to_shadowed_later.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/close_over_function_parameter.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/close_over_later_variable.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/closed_closure_in_function.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/open_closure_in_function.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/reference_closure_multiple_times.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/reuse_closure_slot.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/shadow_closure_with_local.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/unused_closure.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/unused_later_closure.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/comments/line_at_eof.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/comments/only_line_comment.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/comments/only_line_comment_and_line.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/comments/unicode.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/empty_file.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/closure_in_body.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/return_closure.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/return_inside.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/scope.lox
+# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/syntax.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/empty_body.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/local_recursion.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/nested_call_with_arguments.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/parameters.lox
+# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/print.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/recursion.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/if/dangling_else.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/if/else.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/if/if.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/nil/literal.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/number/literals.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/number/nan_equality.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/add.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/comparison.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/divide.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/equals.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/multiply.lox
+# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/negate.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/not_equals.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/subtract.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/precedence.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/after_else.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/after_if.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/after_while.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/in_function.lox
+# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/return_nil_if_no_value.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/string/literals.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/early_bound.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/in_middle_of_block.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/in_nested_block.lox
-
-# Expression tests
-https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/add.lox
-https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/multiply.lox
-
-https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/closure_in_body.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/redeclare_global.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/redefine_global.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/scope_reuse_in_different_blocks.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/shadow_and_local.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/shadow_global.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/shadow_local.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/uninitialized.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/use_global_in_initializer.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/closure_in_body.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/return_closure.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/return_inside.lox
+# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/syntax.lox
