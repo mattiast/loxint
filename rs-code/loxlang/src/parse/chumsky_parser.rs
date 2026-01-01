@@ -446,13 +446,89 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
                     Statement::While(cond, Box::new(body)).annotate(to_byte_span(ann.span()))
                 });
 
-            // TODO: For loop
+            // For loop - desugared into while loop
+            // for (init; cond; incr) body
+            // =>
+            // {
+            //   init;
+            //   while (cond) {
+            //     { body }
+            //     incr;
+            //   }
+            // }
+            let for_stmt = select! { (Token::For, _) => () }
+                .ignore_then(lparen.clone())
+                .ignore_then(
+                    // Parse initializer - can be var declaration, expression, or empty
+                    choice((
+                        // var x = expr;
+                        select! { (Token::Var, _) => () }
+                            .ignore_then(ident.clone())
+                            .then(equal.clone().ignore_then(expr.clone()).or_not())
+                            .then_ignore(semicolon.clone())
+                            .map(|(name, init)| Some(Declaration::Var(VariableDecl(name), init))),
+                        // expr;
+                        expr.clone()
+                            .then_ignore(semicolon.clone())
+                            .map(|e| {
+                                let span = e.annotation;
+                                Some(Declaration::Statement(Statement::Expression(e).annotate(span)))
+                            }),
+                        // ; (empty)
+                        semicolon.clone().to(None),
+                    ))
+                )
+                .then(
+                    // Parse condition - expression or empty
+                    expr.clone()
+                        .then_ignore(semicolon.clone())
+                        .or_not()
+                )
+                .then(
+                    // Parse increment - expression or empty
+                    expr.clone()
+                        .or_not()
+                )
+                .then_ignore(rparen.clone())
+                .then(stmt.clone())
+                .map_with(|(((init, cond), incr), body), ann| {
+                    let span = to_byte_span(ann.span());
+
+                    // Default condition to 'true' if not specified
+                    let cond = cond.unwrap_or_else(|| {
+                        Expression::BooleanLiteral(true).annotate(span)
+                    });
+
+                    // Build while body: { original_body; incr; }
+                    let mut while_body_decls = vec![Declaration::Statement(body)];
+                    if let Some(incr_expr) = incr {
+                        let incr_span = incr_expr.annotation;
+                        while_body_decls.push(Declaration::Statement(
+                            Statement::Expression(incr_expr).annotate(incr_span)
+                        ));
+                    }
+
+                    let while_stmt = Statement::While(
+                        cond,
+                        Box::new(Statement::Block(while_body_decls).annotate(span))
+                    ).annotate(span);
+
+                    // Wrap in block with initializer if present
+                    let mut block_decls = Vec::new();
+                    if let Some(init_decl) = init {
+                        block_decls.push(init_decl);
+                    }
+                    block_decls.push(Declaration::Statement(while_stmt));
+
+                    Statement::Block(block_decls).annotate(span)
+                });
 
             choice((
                 print_stmt,
                 return_stmt,
                 if_stmt,
                 while_stmt,
+                for_stmt,
                 block,
                 expr_stmt,
             ))
