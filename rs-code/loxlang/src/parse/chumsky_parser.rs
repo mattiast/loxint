@@ -1,6 +1,6 @@
-use chumsky::prelude::*;
+use crate::parse::{for_loop_into_while_loop, ByteSpan, ForLoopDef};
 use crate::syntax::*;
-use crate::parse::ByteSpan;
+use chumsky::prelude::*;
 
 /// Simple example parser using chumsky
 /// This starts with basic expressions: literals, binary operations, and parentheses
@@ -55,7 +55,8 @@ pub enum Token<'a> {
 }
 
 /// Lexer that converts source code into tokens
-pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<(Token<'a>, SimpleSpan)>, extra::Err<Simple<'a, char>>> {
+pub fn lexer<'a>(
+) -> impl Parser<'a, &'a str, Vec<(Token<'a>, SimpleSpan)>, extra::Err<Simple<'a, char>>> {
     let number = text::int(10)
         .then(just('.').then(text::digits(10)).or_not())
         .to_slice()
@@ -112,15 +113,9 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<(Token<'a>, SimpleSpan)>, ext
         _ => Token::Ident(s),
     });
 
-    let token = choice((
-        number,
-        string,
-        operator,
-        delimiter,
-        keyword,
-    ))
-    .padded_by(text::whitespace())
-    .map_with(|tok, e| (tok, e.span()));
+    let token = choice((number, string, operator, delimiter, keyword))
+        .padded_by(text::whitespace())
+        .map_with(|tok, e| (tok, e.span()));
 
     token.repeated().collect().then_ignore(end())
 }
@@ -154,9 +149,7 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
         let ident = select! {
             (Token::Ident(s), span) => (s, span),
         }
-        .map(|(name, span)| {
-            Expression::Identifier(Variable(name)).annotate(to_byte_span(span))
-        })
+        .map(|(name, span)| Expression::Identifier(Variable(name)).annotate(to_byte_span(span)))
         .labelled("identifier");
 
         let lparen = select! { (Token::LParen, _) => () };
@@ -184,8 +177,7 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
                 // TODO span should include args
                 let start = func.annotation.start;
                 let end = func.annotation.end;
-                Expression::FunctionCall(Box::new(func), args)
-                    .annotate(ByteSpan { start, end })
+                Expression::FunctionCall(Box::new(func), args).annotate(ByteSpan { start, end })
             })
             .boxed();
 
@@ -217,19 +209,16 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
 
         let factor = unary
             .clone()
-            .foldl(
-                factor_op.then(unary).repeated(),
-                |left, (op, right)| {
-                    let start = left.annotation.start;
-                    let end = right.annotation.end;
-                    Expression::Binary {
-                        left: Box::new(left),
-                        operator: op,
-                        right: Box::new(right),
-                    }
-                    .annotate(ByteSpan { start, end })
-                },
-            )
+            .foldl(factor_op.then(unary).repeated(), |left, (op, right)| {
+                let start = left.annotation.start;
+                let end = right.annotation.end;
+                Expression::Binary {
+                    left: Box::new(left),
+                    operator: op,
+                    right: Box::new(right),
+                }
+                .annotate(ByteSpan { start, end })
+            })
             .boxed();
 
         // Term: + -
@@ -240,19 +229,16 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
 
         let term = factor
             .clone()
-            .foldl(
-                term_op.then(factor).repeated(),
-                |left, (op, right)| {
-                    let start = left.annotation.start;
-                    let end = right.annotation.end;
-                    Expression::Binary {
-                        left: Box::new(left),
-                        operator: op,
-                        right: Box::new(right),
-                    }
-                    .annotate(ByteSpan { start, end })
-                },
-            )
+            .foldl(term_op.then(factor).repeated(), |left, (op, right)| {
+                let start = left.annotation.start;
+                let end = right.annotation.end;
+                Expression::Binary {
+                    left: Box::new(left),
+                    operator: op,
+                    right: Box::new(right),
+                }
+                .annotate(ByteSpan { start, end })
+            })
             .boxed();
 
         // Comparison: < > <= >=
@@ -265,19 +251,16 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
 
         let comparison = term
             .clone()
-            .foldl(
-                comparison_op.then(term).repeated(),
-                |left, (op, right)| {
-                    let start = left.annotation.start;
-                    let end = right.annotation.end;
-                    Expression::Binary {
-                        left: Box::new(left),
-                        operator: op,
-                        right: Box::new(right),
-                    }
-                    .annotate(ByteSpan { start, end })
-                },
-            )
+            .foldl(comparison_op.then(term).repeated(), |left, (op, right)| {
+                let start = left.annotation.start;
+                let end = right.annotation.end;
+                Expression::Binary {
+                    left: Box::new(left),
+                    operator: op,
+                    right: Box::new(right),
+                }
+                .annotate(ByteSpan { start, end })
+            })
             .boxed();
 
         // Equality: == !=
@@ -359,8 +342,7 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
                     if let Expression::Identifier(var) = target.value {
                         let start = target.annotation.start;
                         let end = val.annotation.end;
-                        Expression::Assignment(var, Box::new(val))
-                            .annotate(ByteSpan { start, end })
+                        Expression::Assignment(var, Box::new(val)).annotate(ByteSpan { start, end })
                     } else {
                         // TODO this should fail parsing
                         target
@@ -412,7 +394,8 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
                 .map_with(|e, ann| Statement::Return(e).annotate(to_byte_span(ann.span())));
 
             // Expression statement
-            let expr_stmt = expr.clone()
+            let expr_stmt = expr
+                .clone()
                 .then_ignore(semicolon.clone())
                 .map_with(|e, ann| Statement::Expression(e).annotate(to_byte_span(ann.span())));
 
@@ -428,14 +411,14 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
             let if_stmt = select! { (Token::If, _) => () }
                 .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
                 .then(stmt.clone())
-                .then(select! { (Token::Else, _) => () }.ignore_then(stmt.clone()).or_not())
+                .then(
+                    select! { (Token::Else, _) => () }
+                        .ignore_then(stmt.clone())
+                        .or_not(),
+                )
                 .map_with(|((cond, then_branch), else_branch), ann| {
-                    Statement::If(
-                        cond,
-                        Box::new(then_branch),
-                        else_branch.map(Box::new),
-                    )
-                    .annotate(to_byte_span(ann.span()))
+                    Statement::If(cond, Box::new(then_branch), else_branch.map(Box::new))
+                        .annotate(to_byte_span(ann.span()))
                 });
 
             // While statement
@@ -466,61 +449,33 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
                             .ignore_then(ident.clone())
                             .then(equal.clone().ignore_then(expr.clone()).or_not())
                             .then_ignore(semicolon.clone())
-                            .map(|(name, init)| Some(Declaration::Var(VariableDecl(name), init))),
+                            .map(|(name, init)| (Some(VariableDecl(name)), init)),
                         // expr;
                         expr.clone()
                             .then_ignore(semicolon.clone())
-                            .map(|e| {
-                                let span = e.annotation;
-                                Some(Declaration::Statement(Statement::Expression(e).annotate(span)))
-                            }),
+                            .map(|e| (None, Some(e))),
                         // ; (empty)
-                        semicolon.clone().to(None),
-                    ))
+                        semicolon.clone().to((None, None)),
+                    )),
                 )
                 .then(
                     // Parse condition - expression or empty
-                    expr.clone()
-                        .then_ignore(semicolon.clone())
-                        .or_not()
+                    expr.clone().then_ignore(semicolon.clone()).or_not(),
                 )
                 .then(
                     // Parse increment - expression or empty
-                    expr.clone()
-                        .or_not()
+                    expr.clone().or_not(),
                 )
                 .then_ignore(rparen.clone())
                 .then(stmt.clone())
-                .map_with(|(((init, cond), incr), body), ann| {
-                    let span = to_byte_span(ann.span());
-
-                    // Default condition to 'true' if not specified
-                    let cond = cond.unwrap_or_else(|| {
-                        Expression::BooleanLiteral(true).annotate(span)
-                    });
-
-                    // Build while body: { original_body; incr; }
-                    let mut while_body_decls = vec![Declaration::Statement(body)];
-                    if let Some(incr_expr) = incr {
-                        let incr_span = incr_expr.annotation;
-                        while_body_decls.push(Declaration::Statement(
-                            Statement::Expression(incr_expr).annotate(incr_span)
-                        ));
-                    }
-
-                    let while_stmt = Statement::While(
+                .map(|((((var_name, start), cond), increment), body)| {
+                    let for_loop_def = ForLoopDef {
+                        var_name,
+                        start,
                         cond,
-                        Box::new(Statement::Block(while_body_decls).annotate(span))
-                    ).annotate(span);
-
-                    // Wrap in block with initializer if present
-                    let mut block_decls = Vec::new();
-                    if let Some(init_decl) = init {
-                        block_decls.push(init_decl);
-                    }
-                    block_decls.push(Declaration::Statement(while_stmt));
-
-                    Statement::Block(block_decls).annotate(span)
+                        increment,
+                    };
+                    for_loop_into_while_loop(for_loop_def, body)
                 });
 
             choice((
@@ -539,9 +494,7 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
             .ignore_then(ident.clone())
             .then(equal.ignore_then(expr.clone()).or_not())
             .then_ignore(semicolon.clone())
-            .map(|(name, init)| {
-                Declaration::Var(VariableDecl(name), init)
-            });
+            .map(|(name, init)| Declaration::Var(VariableDecl(name), init));
 
         // Function declaration
         let param_list = ident
@@ -554,22 +507,16 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
             .ignore_then(ident.clone())
             .then(param_list)
             .then(stmt.clone())
-            .map(|((name, args), body)| {
-                Declaration::Function {
-                    name: VariableDecl(name),
-                    args: args.into_iter().map(VariableDecl).collect(),
-                    body,
-                }
+            .map(|((name, args), body)| Declaration::Function {
+                name: VariableDecl(name),
+                args: args.into_iter().map(VariableDecl).collect(),
+                body,
             });
 
         // Statement as declaration
         let stmt_decl = stmt.map(Declaration::Statement);
 
-        choice((
-            var_decl,
-            fun_decl,
-            stmt_decl,
-        ))
+        choice((var_decl, fun_decl, stmt_decl))
     })
 }
 
@@ -627,7 +574,12 @@ mod tests {
         let tokens = lexer().parse(src).unwrap();
         let ast = expr_parser().parse(&tokens).unwrap();
 
-        if let Expression::Binary { left, operator, right } = ast.value {
+        if let Expression::Binary {
+            left,
+            operator,
+            right,
+        } = ast.value
+        {
             assert!(matches!(left.value, Expression::NumberLiteral(2.0)));
             assert_eq!(operator, BOperator::PLUS);
             assert!(matches!(right.value, Expression::NumberLiteral(3.0)));
@@ -643,11 +595,21 @@ mod tests {
         let ast = expr_parser().parse(&tokens).unwrap();
 
         // Should parse as: 2 + (3 * 4)
-        if let Expression::Binary { left, operator: op1, right } = ast.value {
+        if let Expression::Binary {
+            left,
+            operator: op1,
+            right,
+        } = ast.value
+        {
             assert!(matches!(left.value, Expression::NumberLiteral(2.0)));
             assert_eq!(op1, BOperator::PLUS);
 
-            if let Expression::Binary { left: left2, operator: op2, right: right2 } = right.value {
+            if let Expression::Binary {
+                left: left2,
+                operator: op2,
+                right: right2,
+            } = right.value
+            {
                 assert!(matches!(left2.value, Expression::NumberLiteral(3.0)));
                 assert_eq!(op2, BOperator::STAR);
                 assert!(matches!(right2.value, Expression::NumberLiteral(4.0)));
@@ -666,8 +628,18 @@ mod tests {
         let ast = expr_parser().parse(&tokens).unwrap();
 
         // Should parse as: (2 + 3) * 4
-        if let Expression::Binary { left, operator, right } = ast.value {
-            if let Expression::Binary { left: left2, operator: op2, right: right2 } = left.value {
+        if let Expression::Binary {
+            left,
+            operator,
+            right,
+        } = ast.value
+        {
+            if let Expression::Binary {
+                left: left2,
+                operator: op2,
+                right: right2,
+            } = left.value
+            {
                 assert!(matches!(left2.value, Expression::NumberLiteral(2.0)));
                 assert_eq!(op2, BOperator::PLUS);
                 assert!(matches!(right2.value, Expression::NumberLiteral(3.0)));
@@ -702,7 +674,10 @@ mod tests {
         let tokens = lexer().parse(src).unwrap();
         let ast = expr_parser().parse(&tokens).unwrap();
 
-        assert!(matches!(ast.value, Expression::StringLiteral("hello world")));
+        assert!(matches!(
+            ast.value,
+            Expression::StringLiteral("hello world")
+        ));
     }
 
     #[test]
@@ -711,7 +686,12 @@ mod tests {
         let tokens = lexer().parse(src).unwrap();
         let ast = expr_parser().parse(&tokens).unwrap();
 
-        if let Expression::Binary { left, operator, right } = ast.value {
+        if let Expression::Binary {
+            left,
+            operator,
+            right,
+        } = ast.value
+        {
             assert!(matches!(left.value, Expression::NumberLiteral(3.0)));
             assert_eq!(operator, BOperator::LESS);
             assert!(matches!(right.value, Expression::NumberLiteral(5.0)));
@@ -810,11 +790,21 @@ mod tests {
         let ast = expr_parser().parse(&tokens).unwrap();
 
         // Should parse as: (true and false) or true
-        if let Expression::Binary { left, operator, right } = ast.value {
+        if let Expression::Binary {
+            left,
+            operator,
+            right,
+        } = ast.value
+        {
             assert_eq!(operator, BOperator::OR);
             assert!(matches!(right.value, Expression::BooleanLiteral(true)));
 
-            if let Expression::Binary { left: left2, operator: op2, right: right2 } = left.value {
+            if let Expression::Binary {
+                left: left2,
+                operator: op2,
+                right: right2,
+            } = left.value
+            {
                 assert_eq!(op2, BOperator::AND);
                 assert!(matches!(left2.value, Expression::BooleanLiteral(true)));
                 assert!(matches!(right2.value, Expression::BooleanLiteral(false)));
