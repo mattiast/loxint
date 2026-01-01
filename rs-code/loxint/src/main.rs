@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use loxlang::parse;
-use loxlang::parse::scanner::parse_tokens;
 use loxlang::resolution::Resolver;
 use loxlang::syntax::{Annotated, Declaration, Statement};
 use miette::Result;
@@ -64,15 +63,51 @@ fn main() -> Result<()> {
                 // The runtime expects shared parts of the code to have same lifetime as the runtime
                 // itself, and the string we have won't life long enough.
                 let s: &'static str = Box::leak(input.into_boxed_str());
-                let tokens = parse_tokens(&s)?;
-                let mut p = parse::Parser::new(&s, &tokens);
 
-                // NOTE: for expression, you need a semicolon at the end
-                let decl = p.parse_declaration()?;
+                use chumsky::Parser as ChumskyParser;
+
+                // Lex the input
+                let tokens = parse::chumsky_parser::lexer()
+                    .parse(s)
+                    .into_result()
+                    .map_err(|errors| {
+                        let err = errors.into_iter().next().unwrap();
+                        let span = err.span();
+                        parse::LexicalError {
+                            src: s.to_string(),
+                            source_offset: span.start.into(),
+                        }
+                    })?;
+
+                // Parse a single declaration
+                let decl = parse::chumsky_parser::decl_parser()
+                    .parse(&tokens)
+                    .into_result()
+                    .map_err(|errors| {
+                        let err = errors.into_iter().next().unwrap();
+                        let token_span = err.span();
+
+                        // Map token indices to character positions
+                        let char_span = if token_span.start < tokens.len() {
+                            let start_char = tokens[token_span.start].1.start;
+                            let end_char = if token_span.end <= tokens.len() && token_span.end > 0 {
+                                tokens[token_span.end - 1].1.end
+                            } else {
+                                tokens[token_span.start].1.end
+                            };
+                            miette::SourceSpan::new(start_char.into(), end_char - start_char)
+                        } else {
+                            miette::SourceSpan::new(s.len().into(), 0)
+                        };
+
+                        parse::ParseError::UnexpectedToken {
+                            src: s.to_string(),
+                            span: char_span,
+                            help: format!("Unexpected token while parsing declaration"),
+                        }
+                    })?;
+
                 let decl = resolver.resolve_declaration(decl)?;
-                if !p.done() {
-                    eprintln!("Unparsed tokens");
-                }
                 if debug {
                     println!("Input expression: {:?}", decl);
                 }
