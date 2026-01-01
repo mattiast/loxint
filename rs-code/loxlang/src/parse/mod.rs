@@ -565,13 +565,13 @@ where
 /// 3. var_name is None and start is Some: this is `x = 0;` case where an existing variable is used, and the expression is typically an assignment
 /// 4. Both are none: here the first part is empty `for(;...)`, initialization is done outside the loop
 #[derive(Debug, Clone)]
-struct ForLoopDef<'a, VR, VD, Ann> {
-    var_name: Option<VariableDecl<VD>>,
-    start: Option<AnnotatedExpression<'a, VR, Ann>>,
-    cond: Option<AnnotatedExpression<'a, VR, Ann>>,
-    increment: Option<AnnotatedExpression<'a, VR, Ann>>,
+pub struct ForLoopDef<'a, VR, VD, Ann> {
+    pub var_name: Option<VariableDecl<VD>>,
+    pub start: Option<AnnotatedExpression<'a, VR, Ann>>,
+    pub cond: Option<AnnotatedExpression<'a, VR, Ann>>,
+    pub increment: Option<AnnotatedExpression<'a, VR, Ann>>,
 }
-fn for_loop_into_while_loop<'src>(
+pub fn for_loop_into_while_loop<'src>(
     loopdef: ForLoopDef<'src, &'src str, &'src str, ByteSpan>,
     body: ParsedStatement<'src>,
 ) -> ParsedStatement<'src> {
