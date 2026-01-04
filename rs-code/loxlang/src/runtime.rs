@@ -316,7 +316,6 @@ mod tests {
     use crate::execution_env::Deps;
     use crate::execution_env::ExecEnv;
     use crate::parse;
-    use crate::parse::scanner::parse_tokens;
 
     use super::*;
     struct TestDeps {
@@ -335,16 +334,26 @@ mod tests {
     }
 
     fn get_output(source: &str) -> Vec<String> {
+        use chumsky::Parser;
+
         let deps = TestDeps {
             printed: Vec::new(),
             time: 0.0,
         };
         let env = ExecEnv::new(deps);
         let mut runtime = Runtime::new(env);
-        let tokens = parse_tokens(source).unwrap();
-        let parser = parse::Parser::new(source, &tokens);
-        let program = parser.parse_program().unwrap();
+
+        // Lex and parse using chumsky
+        let tokens = parse::chumsky_parser::lexer()
+            .parse(source)
+            .into_result()
+            .unwrap();
+        let program = parse::chumsky_parser::program_parser()
+            .parse(&tokens)
+            .into_result()
+            .unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
+
         for stmt in program.decls {
             runtime.run_declaration(&stmt).unwrap().unwrap();
         }

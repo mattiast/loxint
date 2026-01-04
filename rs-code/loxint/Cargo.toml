@@ -7,3 +7,4 @@ edition = "2021"
 loxlang = { path = "../loxlang"}
 clap.workspace = true
 miette = { version = "7", features = ["fancy"] }
+chumsky.workspace = true

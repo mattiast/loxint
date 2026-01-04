@@ -93,7 +93,7 @@ fn eval_expr_inner(src: &str) -> Result<Value<'_>, LoxError> {
             let err = errors.into_iter().next().unwrap();
             let span = err.span();
             // TODO integrate these errors with LoxError to simplify this
-            LoxError::LexicalError(parse::scanner::LexicalError {
+            LoxError::LexicalError(parse::LexicalError {
                 src: src.to_string(),
                 source_offset: span.start.into(),
             })
@@ -162,7 +162,7 @@ fn run_program_inner(src: &str) -> Result<Vec<String>, LoxError> {
             // Take the first error
             let err = errors.into_iter().next().unwrap();
             let span = err.span();
-            LoxError::LexicalError(parse::scanner::LexicalError {
+            LoxError::LexicalError(parse::LexicalError {
                 src: src.to_string(),
                 source_offset: span.start.into(),
             })
