@@ -1,7 +1,8 @@
 use crate::parse::{for_loop_into_while_loop, ByteSpan, ForLoopDef};
 use crate::syntax::*;
+use chumsky::input::MapExtra;
+use chumsky::pratt::{infix, left, postfix, prefix, right};
 use chumsky::prelude::*;
-use chumsky::pratt::{left, right, infix, prefix, postfix};
 
 /// Simple example parser using chumsky
 /// This starts with basic expressions: literals, binary operations, and parentheses
@@ -204,105 +205,61 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
             .collect::<Vec<_>>()
             .delimited_by(lparen, rparen);
 
+        fn bin_expr<'a, 'src: 'a>(
+            left: ParsedExpression<'a>,
+            op: BOperator,
+            right: ParsedExpression<'a>,
+            // e: &mut MapExtra<'src, 'a, (Token<'src>, SimpleSpan), extra::Err<Simple<'a, (Token<'src>, SimpleSpan)>>>,
+        ) -> ParsedExpression<'a> {
+            let l_ann = left.annotation;
+            let r_ann = right.annotation;
+            Expression::Binary {
+                left: Box::new(left),
+                operator: op,
+                right: Box::new(right),
+            }
+            .annotate(ByteSpan {
+                start: l_ann.start,
+                end: r_ann.end,
+            })
+        }
         // Build Pratt parser with all operators
         atom.pratt((
             // Assignment (right-associative, lowest precedence)
-            infix(right(10), equal, |lhs: ParsedExpression<'src>, _, rhs, _| {
-                let l_ann = lhs.annotation;
-                let r_ann = rhs.annotation;
-                if let Expression::Identifier(var) = lhs.value {
-                    Expression::Assignment(var, Box::new(rhs)).annotate(ByteSpan {
-                        start: l_ann.start,
-                        end: r_ann.end,
-                    })
-                } else {
-                    // TODO this should fail parsing
-                    lhs
-                }
-            }),
+            infix(
+                right(10),
+                equal,
+                |lhs: ParsedExpression<'src>, _, rhs, _| {
+                    let l_ann = lhs.annotation;
+                    let r_ann = rhs.annotation;
+                    if let Expression::Identifier(var) = lhs.value {
+                        Expression::Assignment(var, Box::new(rhs)).annotate(ByteSpan {
+                            start: l_ann.start,
+                            end: r_ann.end,
+                        })
+                    } else {
+                        // TODO this should fail parsing
+                        lhs
+                    }
+                },
+            ),
             // Logical OR
-            infix(left(20), or_op, |lhs: ParsedExpression<'src>, op, rhs, _| {
-                let l_ann = lhs.annotation;
-                let r_ann = rhs.annotation;
-                Expression::Binary {
-                    left: Box::new(lhs),
-                    operator: op,
-                    right: Box::new(rhs),
-                }
-                .annotate(ByteSpan {
-                    start: l_ann.start,
-                    end: r_ann.end,
-                })
-            }),
+            infix(left(20), or_op, |lhs, op, rhs, _| bin_expr(lhs, op, rhs)),
             // Logical AND
-            infix(left(30), and_op, |lhs: ParsedExpression<'src>, op, rhs, _| {
-                let l_ann = lhs.annotation;
-                let r_ann = rhs.annotation;
-                Expression::Binary {
-                    left: Box::new(lhs),
-                    operator: op,
-                    right: Box::new(rhs),
-                }
-                .annotate(ByteSpan {
-                    start: l_ann.start,
-                    end: r_ann.end,
-                })
-            }),
+            infix(left(30), and_op, |lhs, op, rhs, _| bin_expr(lhs, op, rhs)),
             // Equality
-            infix(left(40), equality_op, |lhs: ParsedExpression<'src>, op, rhs, _| {
-                let l_ann = lhs.annotation;
-                let r_ann = rhs.annotation;
-                Expression::Binary {
-                    left: Box::new(lhs),
-                    operator: op,
-                    right: Box::new(rhs),
-                }
-                .annotate(ByteSpan {
-                    start: l_ann.start,
-                    end: r_ann.end,
-                })
+            infix(left(40), equality_op, |lhs, op, rhs, _| {
+                bin_expr(lhs, op, rhs)
             }),
             // Comparison
-            infix(left(50), comparison_op, |lhs: ParsedExpression<'src>, op, rhs, _| {
-                let l_ann = lhs.annotation;
-                let r_ann = rhs.annotation;
-                Expression::Binary {
-                    left: Box::new(lhs),
-                    operator: op,
-                    right: Box::new(rhs),
-                }
-                .annotate(ByteSpan {
-                    start: l_ann.start,
-                    end: r_ann.end,
-                })
+            infix(left(50), comparison_op, |lhs, op, rhs, _| {
+                bin_expr(lhs, op, rhs)
             }),
             // Term: addition and subtraction
-            infix(left(60), term_op, |lhs: ParsedExpression<'src>, op, rhs, _| {
-                let l_ann = lhs.annotation;
-                let r_ann = rhs.annotation;
-                Expression::Binary {
-                    left: Box::new(lhs),
-                    operator: op,
-                    right: Box::new(rhs),
-                }
-                .annotate(ByteSpan {
-                    start: l_ann.start,
-                    end: r_ann.end,
-                })
-            }),
+            infix(left(60), term_op, |lhs, op, rhs, _| bin_expr(lhs, op, rhs)),
             // Factor: multiplication and division
-            infix(left(70), factor_op, |lhs: ParsedExpression<'src>, op, rhs, _| {
-                let l_ann = lhs.annotation;
-                let r_ann = rhs.annotation;
-                Expression::Binary {
-                    left: Box::new(lhs),
-                    operator: op,
-                    right: Box::new(rhs),
-                }
-                .annotate(ByteSpan {
-                    start: l_ann.start,
-                    end: r_ann.end,
-                })
+            infix(left(70), factor_op, |lhs, op, rhs, _| {
+                bin_expr(lhs, op, rhs)
             }),
             // Unary operators: - and !
             prefix(80, unary_op, |op, rhs: ParsedExpression<'src>, _| {
