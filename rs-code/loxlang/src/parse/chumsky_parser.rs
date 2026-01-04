@@ -12,14 +12,21 @@ fn to_byte_span(span: SimpleSpan) -> ByteSpan {
         end: span.end,
     }
 }
+fn jop<'src, T: Clone>(
+    s: &'static str,
+    v: T,
+) -> impl Parser<'src, &'src str, T, extra::Err<Simple<'src, char>>> + Clone {
+    just(s).padded().to(v)
+}
+fn kw<'src>(
+    s: &'static str,
+) -> impl Parser<'src, &'src str, (), extra::Err<Simple<'src, char>>> + Clone {
+    text::keyword(s).padded().to(())
+}
 
 /// Parser for expressions
-pub fn expr_parser<'src>() -> impl Parser<
-    'src,
-    &'src str,
-    ParsedExpression<'src>,
-    extra::Err<Simple<'src, char>>,
-> + Clone {
+pub fn expr_parser<'src>(
+) -> impl Parser<'src, &'src str, ParsedExpression<'src>, extra::Err<Simple<'src, char>>> + Clone {
     recursive(|expr| {
         // Parse numbers
         let number = text::int(10)
@@ -40,18 +47,23 @@ pub fn expr_parser<'src>() -> impl Parser<
             .labelled("string");
 
         // Parse identifiers and keywords
-        let ident = text::ascii::ident().map_with(|s: &'src str, e| match s {
-            "true" => Expression::BooleanLiteral(true).annotate(to_byte_span(e.span())),
-            "false" => Expression::BooleanLiteral(false).annotate(to_byte_span(e.span())),
-            "nil" => Expression::Nil.annotate(to_byte_span(e.span())),
-            _ => Expression::Identifier(Variable(s)).annotate(to_byte_span(e.span())),
-        })
-        .labelled("identifier");
+        let ident = text::ascii::ident()
+            .map(|s: &'src str| match s {
+                "true" => Expression::BooleanLiteral(true),
+                "false" => Expression::BooleanLiteral(false),
+                "nil" => Expression::Nil,
+                _ => Expression::Identifier(Variable(s)),
+            })
+            .map_with(|expr, ex| {
+                // Ensure the annotation spans the entire identifier
+                expr.annotate(to_byte_span(ex.span()))
+            })
+            .labelled("identifier");
 
         // Delimiters
-        let lparen = just('(').padded();
-        let rparen = just(')').padded();
-        let comma = just(',').padded();
+        let lparen = jop("(", ());
+        let rparen = jop(")", ());
+        let comma = jop(",", ());
 
         // Primary expressions (atoms)
         let literal = choice((number, string));
@@ -67,37 +79,26 @@ pub fn expr_parser<'src>() -> impl Parser<
         .padded();
 
         // Define operator parsers for each precedence level
-        let equal = just('=').padded();
+        let equal = jop("=", ());
 
-        let or_op = text::keyword("or").padded().to(BOperator::OR);
-        let and_op = text::keyword("and").padded().to(BOperator::AND);
+        let or_op = kw("or").to(BOperator::OR);
+        let and_op = kw("and").to(BOperator::AND);
 
         let equality_op = choice((
-            just("==").padded().to(BOperator::EqualEqual),
-            just("!=").padded().to(BOperator::BangEqual),
+            jop("==", BOperator::EqualEqual),
+            jop("!=", BOperator::BangEqual),
         ));
 
         let comparison_op = choice((
-            just("<=").padded().to(BOperator::LessEqual),
-            just(">=").padded().to(BOperator::GreaterEqual),
-            just('<').padded().to(BOperator::LESS),
-            just('>').padded().to(BOperator::GREATER),
+            jop("<=", BOperator::LessEqual),
+            jop(">=", BOperator::GreaterEqual),
+            jop("<", BOperator::LESS),
+            jop(">", BOperator::GREATER),
         ));
 
-        let term_op = choice((
-            just('+').padded().to(BOperator::PLUS),
-            just('-').padded().to(BOperator::MINUS),
-        ));
-
-        let factor_op = choice((
-            just('*').padded().to(BOperator::STAR),
-            just('/').padded().to(BOperator::SLASH),
-        ));
-
-        let unary_op = choice((
-            just('-').padded().to(UOperator::MINUS),
-            just('!').padded().to(UOperator::BANG),
-        ));
+        let term_op = choice((jop("+", BOperator::PLUS), jop("-", BOperator::MINUS)));
+        let factor_op = choice((jop("*", BOperator::STAR), jop("/", BOperator::SLASH)));
+        let unary_op = choice((jop("-", UOperator::MINUS), jop("!", UOperator::BANG)));
 
         // Function calls: foo(arg1, arg2, ...)
         let arg_list = expr
@@ -185,36 +186,30 @@ pub fn expr_parser<'src>() -> impl Parser<
 type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str, ByteSpan>;
 
 /// Parser for statements and declarations (combined to avoid mutual recursion issues)
-pub fn decl_parser<'src>() -> impl Parser<
-    'src,
-    &'src str,
-    ParsedDeclaration<'src>,
-    extra::Err<Simple<'src, char>>,
-> + Clone {
+pub fn decl_parser<'src>(
+) -> impl Parser<'src, &'src str, ParsedDeclaration<'src>, extra::Err<Simple<'src, char>>> + Clone {
     recursive(|decl| {
         let expr = expr_parser();
-        let semicolon = just(';').padded();
-        let equal = just('=').padded();
-        let comma = just(',').padded();
-        let lparen = just('(').padded();
-        let rparen = just(')').padded();
-        let lbrace = just('{').padded();
-        let rbrace = just('}').padded();
+        let semicolon = jop(";", ());
+        let equal = jop("=", ());
+        let comma = jop(",", ());
+        let lparen = jop("(", ());
+        let rparen = jop(")", ());
+        let lbrace = jop("{", ());
+        let rbrace = jop("}", ());
 
         let ident = text::ascii::ident().padded();
 
         // Statements (defined inline to avoid mutual recursion)
         let stmt = recursive(|stmt| {
             // Print statement
-            let print_stmt = text::keyword("print")
-                .padded()
+            let print_stmt = kw("print")
                 .ignore_then(expr.clone())
                 .then_ignore(semicolon.clone())
                 .map_with(|e, ann| Statement::Print(e).annotate(to_byte_span(ann.span())));
 
             // Return statement
-            let return_stmt = text::keyword("return")
-                .padded()
+            let return_stmt = kw("return")
                 .ignore_then(expr.clone().or_not())
                 .then_ignore(semicolon.clone())
                 .map_with(|e, ann| {
@@ -240,24 +235,17 @@ pub fn decl_parser<'src>() -> impl Parser<
                 .map_with(|decls, ann| Statement::Block(decls).annotate(to_byte_span(ann.span())));
 
             // If statement
-            let if_stmt = text::keyword("if")
-                .padded()
+            let if_stmt = kw("if")
                 .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
                 .then(stmt.clone())
-                .then(
-                    text::keyword("else")
-                        .padded()
-                        .ignore_then(stmt.clone())
-                        .or_not(),
-                )
+                .then(kw("else").ignore_then(stmt.clone()).or_not())
                 .map_with(|((cond, then_branch), else_branch), ann| {
                     Statement::If(cond, Box::new(then_branch), else_branch.map(Box::new))
                         .annotate(to_byte_span(ann.span()))
                 });
 
             // While statement
-            let while_stmt = text::keyword("while")
-                .padded()
+            let while_stmt = kw("while")
                 .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
                 .then(stmt.clone())
                 .map_with(|(cond, body), ann| {
@@ -274,15 +262,13 @@ pub fn decl_parser<'src>() -> impl Parser<
             //     incr;
             //   }
             // }
-            let for_stmt = text::keyword("for")
-                .padded()
+            let for_stmt = kw("for")
                 .ignore_then(lparen.clone())
                 .ignore_then(
                     // Parse initializer - can be var declaration, expression, or empty
                     choice((
                         // var x = expr;
-                        text::keyword("var")
-                            .padded()
+                        kw("var")
                             .ignore_then(ident.clone())
                             .then(equal.clone().ignore_then(expr.clone()).or_not())
                             .then_ignore(semicolon.clone())
@@ -327,8 +313,7 @@ pub fn decl_parser<'src>() -> impl Parser<
         });
 
         // Variable declaration
-        let var_decl = text::keyword("var")
-            .padded()
+        let var_decl = kw("var")
             .ignore_then(ident.clone())
             .then(equal.ignore_then(expr.clone()).or_not())
             .then_ignore(semicolon.clone())
@@ -342,8 +327,7 @@ pub fn decl_parser<'src>() -> impl Parser<
             .collect::<Vec<_>>()
             .delimited_by(lparen.clone(), rparen.clone());
 
-        let fun_decl = text::keyword("fun")
-            .padded()
+        let fun_decl = kw("fun")
             .ignore_then(ident.clone())
             .then(param_list)
             .then(stmt.clone())
