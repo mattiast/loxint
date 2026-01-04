@@ -61,7 +61,6 @@ pub fn lexer<'a>(
         .then(just('.').then(text::digits(10)).or_not())
         .to_slice()
         .from_str::<f64>()
-        // TODO a better way to parse numbers with error handling
         .unwrapped()
         .map(Token::Number)
         .labelled("number");
