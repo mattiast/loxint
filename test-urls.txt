@@ -42,7 +42,7 @@ https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/mas
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/divide.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/equals.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/multiply.lox
-# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/negate.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/negate.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/not_equals.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/operator/subtract.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/precedence.lox
