@@ -3,7 +3,7 @@ use loxlang::execution_env::Deps;
 use loxlang::execution_env::Value;
 use loxlang::parse;
 use loxlang::parse::chumsky_parser;
-use loxlang::resolution::resolve;
+use loxlang::parse_program;
 use loxlang::resolution::resolve_expr_no_var;
 use loxlang::LoxError;
 use serde::{Deserialize, Serialize};
@@ -123,26 +123,7 @@ pub fn run_program(src: String) -> LoxResult<Vec<String>> {
 }
 
 fn run_program_inner(src: &str) -> Result<Vec<String>, LoxError> {
-    use chumsky::Parser;
-
-    // Parse the program directly from source
-    let program = chumsky_parser::program_parser()
-        .parse(src)
-        .into_result()
-        .map_err(|errors| {
-            // Take the first error
-            let err = errors.into_iter().next().unwrap();
-            let span = err.span();
-
-            LoxError::ParseError(parse::ParseError::UnexpectedToken {
-                src: src.to_string(),
-                span: miette::SourceSpan::new(span.start.into(), span.end - span.start),
-                help: format!("Unexpected input while parsing program"),
-            })
-        })?;
-
-    // Resolve variables
-    let program = resolve(program, &src)?;
+    let program = parse_program(src)?;
 
     let deps = TestDeps {
         printed: Vec::new(),
