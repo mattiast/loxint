@@ -343,13 +343,9 @@ mod tests {
         let env = ExecEnv::new(deps);
         let mut runtime = Runtime::new(env);
 
-        // Lex and parse using chumsky
-        let tokens = parse::chumsky_parser::lexer()
-            .parse(source)
-            .into_result()
-            .unwrap();
+        // Parse using chumsky
         let program = parse::chumsky_parser::program_parser()
-            .parse(&tokens)
+            .parse(source)
             .into_result()
             .unwrap();
         let program = crate::resolution::resolve(program, source).unwrap();
