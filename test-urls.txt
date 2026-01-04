@@ -1,7 +1,6 @@
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/associativity.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/global.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/local.lox
-# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/assignment/syntax.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/block/empty.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/block/scope.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/closure/assign_to_closure.lox
@@ -29,7 +28,6 @@ https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/mas
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/local_recursion.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/nested_call_with_arguments.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/parameters.lox
-# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/print.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/recursion.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/if/dangling_else.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/if/else.lox
@@ -66,4 +64,3 @@ https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/mas
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/closure_in_body.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/return_closure.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/return_inside.lox
-# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/while/syntax.lox
