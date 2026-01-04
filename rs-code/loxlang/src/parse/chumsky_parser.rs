@@ -388,9 +388,14 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
 
             // Return statement
             let return_stmt = select! { (Token::Return, _) => () }
-                .ignore_then(expr.clone())
+                .ignore_then(expr.clone().or_not())
                 .then_ignore(semicolon.clone())
-                .map_with(|e, ann| Statement::Return(e).annotate(to_byte_span(ann.span())));
+                .map_with(|e, ann| {
+                    Statement::Return(
+                        e.unwrap_or_else(|| Expression::Nil.annotate(to_byte_span(ann.span()))),
+                    )
+                    .annotate(to_byte_span(ann.span()))
+                });
 
             // Expression statement
             let expr_stmt = expr
@@ -459,7 +464,7 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
                 )
                 .then(
                     // Parse condition - expression or empty
-                    expr.clone().then_ignore(semicolon.clone()).or_not(),
+                    expr.clone().or_not().then_ignore(semicolon.clone()),
                 )
                 .then(
                     // Parse increment - expression or empty

@@ -24,7 +24,7 @@ https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/mas
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/return_closure.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/return_inside.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/scope.lox
-# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/syntax.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/for/syntax.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/empty_body.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/local_recursion.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/function/nested_call_with_arguments.lox
@@ -50,7 +50,7 @@ https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/mas
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/after_if.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/after_while.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/in_function.lox
-# https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/return_nil_if_no_value.lox
+https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/return/return_nil_if_no_value.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/string/literals.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/early_bound.lox
 https://raw.githubusercontent.com/munificent/craftinginterpreters/refs/heads/master/test/variable/in_middle_of_block.lox
