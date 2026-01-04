@@ -3,9 +3,6 @@ use crate::syntax::*;
 use chumsky::pratt::{infix, left, postfix, prefix, right};
 use chumsky::prelude::*;
 
-/// Simple example parser using chumsky
-/// This parser works directly on source strings without a separate lexer phase
-
 type ParsedExpression<'src> = AnnotatedExpression<'src, &'src str, ByteSpan>;
 
 /// Helper to convert SimpleSpan to ByteSpan
@@ -16,7 +13,7 @@ fn to_byte_span(span: SimpleSpan) -> ByteSpan {
     }
 }
 
-/// Parser for expressions working directly on source strings
+/// Parser for expressions
 pub fn expr_parser<'src>() -> impl Parser<
     'src,
     &'src str,
