@@ -7,5 +7,5 @@ clap = { version = "4", features = ["derive"] }
 nom = "8"
 thiserror = "2"
 miette = "7"
-chumsky = { version = "0.12", features = ["lexical-numbers"] }
+chumsky = { version = "0.12", features = ["pratt"] }
 regex = "1"

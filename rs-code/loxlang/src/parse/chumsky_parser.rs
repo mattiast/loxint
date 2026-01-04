@@ -1,5 +1,7 @@
 use crate::parse::{for_loop_into_while_loop, ByteSpan, ForLoopDef};
 use crate::syntax::*;
+use chumsky::input::MapExtra;
+use chumsky::pratt::{infix, left, postfix, prefix, right};
 use chumsky::prelude::*;
 
 /// Simple example parser using chumsky
@@ -163,6 +165,39 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
                 .labelled("parenthesized expression"),
         ));
 
+        // Define operator parsers for each precedence level
+        let equal = select! { (Token::Equal, _) => () };
+
+        let or_op = select! { (Token::Or, _) => BOperator::OR };
+        let and_op = select! { (Token::And, _) => BOperator::AND };
+
+        let equality_op = choice((
+            select! { (Token::EqualEqual, _) => BOperator::EqualEqual },
+            select! { (Token::BangEqual, _) => BOperator::BangEqual },
+        ));
+
+        let comparison_op = choice((
+            select! { (Token::Less, _) => BOperator::LESS },
+            select! { (Token::Greater, _) => BOperator::GREATER },
+            select! { (Token::LessEqual, _) => BOperator::LessEqual },
+            select! { (Token::GreaterEqual, _) => BOperator::GreaterEqual },
+        ));
+
+        let term_op = choice((
+            select! { (Token::Plus, _) => BOperator::PLUS },
+            select! { (Token::Minus, _) => BOperator::MINUS },
+        ));
+
+        let factor_op = choice((
+            select! { (Token::Star, _) => BOperator::STAR },
+            select! { (Token::Slash, _) => BOperator::SLASH },
+        ));
+
+        let unary_op = choice((
+            select! { (Token::Minus, _) => UOperator::MINUS },
+            select! { (Token::Bang, _) => UOperator::BANG },
+        ));
+
         // Function calls: foo(arg1, arg2, ...)
         let arg_list = expr
             .clone()
@@ -170,188 +205,78 @@ pub fn expr_parser<'a, 'src: 'a>() -> impl Parser<
             .collect::<Vec<_>>()
             .delimited_by(lparen, rparen);
 
-        let call = atom
-            .clone()
-            .foldl(arg_list.repeated(), |func, args| {
-                // TODO span should include args
-                let start = func.annotation.start;
-                let end = func.annotation.end;
-                Expression::FunctionCall(Box::new(func), args).annotate(ByteSpan { start, end })
+        fn bin_expr<'a, 'src: 'a>(
+            left: ParsedExpression<'a>,
+            op: BOperator,
+            right: ParsedExpression<'a>,
+            // e: &mut MapExtra<'src, 'a, (Token<'src>, SimpleSpan), extra::Err<Simple<'a, (Token<'src>, SimpleSpan)>>>,
+        ) -> ParsedExpression<'a> {
+            let l_ann = left.annotation;
+            let r_ann = right.annotation;
+            Expression::Binary {
+                left: Box::new(left),
+                operator: op,
+                right: Box::new(right),
+            }
+            .annotate(ByteSpan {
+                start: l_ann.start,
+                end: r_ann.end,
             })
-            .boxed();
-
-        // Unary: -expr, !expr
-        let unary_op = select! {
-            (Token::Minus, _) => UOperator::MINUS,
-            (Token::Bang, _) => UOperator::BANG,
-        };
-
-        let unary = unary_op
-            .then(call.clone())
-            .map(|(op, right)| {
-                let start = right.annotation.start;
-                let end = right.annotation.end;
-                Expression::Unary {
-                    operator: op,
-                    right: Box::new(right),
-                }
-                .annotate(ByteSpan { start, end })
-            })
-            .or(call)
-            .boxed();
-
-        // Factor: * /
-        let factor_op = select! {
-            (Token::Star, _) => BOperator::STAR,
-            (Token::Slash, _) => BOperator::SLASH,
-        };
-
-        let factor = unary
-            .clone()
-            .foldl(factor_op.then(unary).repeated(), |left, (op, right)| {
-                let start = left.annotation.start;
-                let end = right.annotation.end;
-                Expression::Binary {
-                    left: Box::new(left),
-                    operator: op,
-                    right: Box::new(right),
-                }
-                .annotate(ByteSpan { start, end })
-            })
-            .boxed();
-
-        // Term: + -
-        let term_op = select! {
-            (Token::Plus, _) => BOperator::PLUS,
-            (Token::Minus, _) => BOperator::MINUS,
-        };
-
-        let term = factor
-            .clone()
-            .foldl(term_op.then(factor).repeated(), |left, (op, right)| {
-                let start = left.annotation.start;
-                let end = right.annotation.end;
-                Expression::Binary {
-                    left: Box::new(left),
-                    operator: op,
-                    right: Box::new(right),
-                }
-                .annotate(ByteSpan { start, end })
-            })
-            .boxed();
-
-        // Comparison: < > <= >=
-        let comparison_op = select! {
-            (Token::Less, _) => BOperator::LESS,
-            (Token::Greater, _) => BOperator::GREATER,
-            (Token::LessEqual, _) => BOperator::LessEqual,
-            (Token::GreaterEqual, _) => BOperator::GreaterEqual,
-        };
-
-        let comparison = term
-            .clone()
-            .foldl(comparison_op.then(term).repeated(), |left, (op, right)| {
-                let start = left.annotation.start;
-                let end = right.annotation.end;
-                Expression::Binary {
-                    left: Box::new(left),
-                    operator: op,
-                    right: Box::new(right),
-                }
-                .annotate(ByteSpan { start, end })
-            })
-            .boxed();
-
-        // Equality: == !=
-        let equality_op = select! {
-            (Token::EqualEqual, _) => BOperator::EqualEqual,
-            (Token::BangEqual, _) => BOperator::BangEqual,
-        };
-
-        let equality = comparison
-            .clone()
-            .foldl(
-                equality_op.then(comparison).repeated(),
-                |left, (op, right)| {
-                    let start = left.annotation.start;
-                    let end = right.annotation.end;
-                    Expression::Binary {
-                        left: Box::new(left),
-                        operator: op,
-                        right: Box::new(right),
-                    }
-                    .annotate(ByteSpan { start, end })
-                },
-            )
-            .boxed();
-
-        // Logical and
-        let logic_and_op = select! {
-            (Token::And, _) => BOperator::AND,
-        };
-
-        let logic_and = equality
-            .clone()
-            .foldl(
-                logic_and_op.then(equality).repeated(),
-                |left, (op, right)| {
-                    let start = left.annotation.start;
-                    let end = right.annotation.end;
-                    Expression::Binary {
-                        left: Box::new(left),
-                        operator: op,
-                        right: Box::new(right),
-                    }
-                    .annotate(ByteSpan { start, end })
-                },
-            )
-            .boxed();
-
-        // Logical or
-        let logic_or_op = select! {
-            (Token::Or, _) => BOperator::OR,
-        };
-
-        let logic_or = logic_and
-            .clone()
-            .foldl(
-                logic_or_op.then(logic_and).repeated(),
-                |left, (op, right)| {
-                    let start = left.annotation.start;
-                    let end = right.annotation.end;
-                    Expression::Binary {
-                        left: Box::new(left),
-                        operator: op,
-                        right: Box::new(right),
-                    }
-                    .annotate(ByteSpan { start, end })
-                },
-            )
-            .boxed();
-
-        // Assignment: x = expr (right-associative)
-        let equal = select! { (Token::Equal, _) => () };
-
-        let assignment = logic_or
-            .clone()
-            .then(equal.ignore_then(expr.clone()).or_not())
-            .map(|(target, value)| {
-                if let Some(val) = value {
-                    // This is an assignment
-                    if let Expression::Identifier(var) = target.value {
-                        let start = target.annotation.start;
-                        let end = val.annotation.end;
-                        Expression::Assignment(var, Box::new(val)).annotate(ByteSpan { start, end })
+        }
+        // Build Pratt parser with all operators
+        atom.pratt((
+            // Assignment (right-associative, lowest precedence)
+            infix(
+                right(10),
+                equal,
+                |lhs: ParsedExpression<'src>, _, rhs, _| {
+                    let l_ann = lhs.annotation;
+                    let r_ann = rhs.annotation;
+                    if let Expression::Identifier(var) = lhs.value {
+                        Expression::Assignment(var, Box::new(rhs)).annotate(ByteSpan {
+                            start: l_ann.start,
+                            end: r_ann.end,
+                        })
                     } else {
                         // TODO this should fail parsing
-                        target
+                        lhs
                     }
-                } else {
-                    target
+                },
+            ),
+            // Logical OR
+            infix(left(20), or_op, |lhs, op, rhs, _| bin_expr(lhs, op, rhs)),
+            // Logical AND
+            infix(left(30), and_op, |lhs, op, rhs, _| bin_expr(lhs, op, rhs)),
+            // Equality
+            infix(left(40), equality_op, |lhs, op, rhs, _| {
+                bin_expr(lhs, op, rhs)
+            }),
+            // Comparison
+            infix(left(50), comparison_op, |lhs, op, rhs, _| {
+                bin_expr(lhs, op, rhs)
+            }),
+            // Term: addition and subtraction
+            infix(left(60), term_op, |lhs, op, rhs, _| bin_expr(lhs, op, rhs)),
+            // Factor: multiplication and division
+            infix(left(70), factor_op, |lhs, op, rhs, _| {
+                bin_expr(lhs, op, rhs)
+            }),
+            // Unary operators: - and !
+            prefix(80, unary_op, |op, rhs: ParsedExpression<'src>, _| {
+                let ann = rhs.annotation;
+                Expression::Unary {
+                    operator: op,
+                    right: Box::new(rhs),
                 }
-            });
-
-        assignment
+                .annotate(ann)
+            }),
+            // Function calls (postfix, highest precedence)
+            postfix(90, arg_list, |func: ParsedExpression<'src>, args, _| {
+                // TODO span should include args and closing paren
+                let ann = func.annotation;
+                Expression::FunctionCall(Box::new(func), args).annotate(ann)
+            }),
+        ))
     })
 }
 
@@ -388,9 +313,14 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
 
             // Return statement
             let return_stmt = select! { (Token::Return, _) => () }
-                .ignore_then(expr.clone())
+                .ignore_then(expr.clone().or_not())
                 .then_ignore(semicolon.clone())
-                .map_with(|e, ann| Statement::Return(e).annotate(to_byte_span(ann.span())));
+                .map_with(|e, ann| {
+                    Statement::Return(
+                        e.unwrap_or_else(|| Expression::Nil.annotate(to_byte_span(ann.span()))),
+                    )
+                    .annotate(to_byte_span(ann.span()))
+                });
 
             // Expression statement
             let expr_stmt = expr
@@ -459,7 +389,7 @@ pub fn decl_parser<'a, 'src: 'a>() -> impl Parser<
                 )
                 .then(
                     // Parse condition - expression or empty
-                    expr.clone().then_ignore(semicolon.clone()).or_not(),
+                    expr.clone().or_not().then_ignore(semicolon.clone()),
                 )
                 .then(
                     // Parse increment - expression or empty
