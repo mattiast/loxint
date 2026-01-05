@@ -66,44 +66,18 @@ fn main() -> Result<()> {
 
                 use chumsky::Parser as ChumskyParser;
 
-                // Lex the input
-                let tokens = parse::chumsky_parser::lexer()
+                // Parse a single declaration directly from source
+                let decl = parse::chumsky_parser::decl_parser()
                     .parse(s)
                     .into_result()
                     .map_err(|errors| {
                         let err = errors.into_iter().next().unwrap();
                         let span = err.span();
-                        parse::LexicalError {
-                            src: s.to_string(),
-                            source_offset: span.start.into(),
-                        }
-                    })?;
-
-                // Parse a single declaration
-                let decl = parse::chumsky_parser::decl_parser()
-                    .parse(&tokens)
-                    .into_result()
-                    .map_err(|errors| {
-                        let err = errors.into_iter().next().unwrap();
-                        let token_span = err.span();
-
-                        // Map token indices to character positions
-                        let char_span = if token_span.start < tokens.len() {
-                            let start_char = tokens[token_span.start].1.start;
-                            let end_char = if token_span.end <= tokens.len() && token_span.end > 0 {
-                                tokens[token_span.end - 1].1.end
-                            } else {
-                                tokens[token_span.start].1.end
-                            };
-                            miette::SourceSpan::new(start_char.into(), end_char - start_char)
-                        } else {
-                            miette::SourceSpan::new(s.len().into(), 0)
-                        };
 
                         parse::ParseError::UnexpectedToken {
                             src: s.to_string(),
-                            span: char_span,
-                            help: format!("Unexpected token while parsing declaration"),
+                            span: miette::SourceSpan::new(span.start.into(), span.end - span.start),
+                            help: format!("Unexpected input while parsing declaration"),
                         }
                     })?;
 

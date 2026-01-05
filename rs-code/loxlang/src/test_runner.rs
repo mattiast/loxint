@@ -1,5 +1,5 @@
 use crate::execution_env::{Deps, ExecEnv, Value};
-use crate::parse::chumsky_parser::{lexer, program_parser};
+use crate::parse::chumsky_parser::program_parser;
 use crate::runtime::Runtime;
 use chumsky::Parser;
 use regex::Regex;
@@ -119,12 +119,8 @@ impl TestCase {
         // Strip comments from source before parsing
         let source_without_comments = Self::strip_comments(&self.source);
 
-        let tokens = lexer()
-            .parse(&source_without_comments)
-            .into_result()
-            .map_err(|e| format!("Lexical error: {:?}", e))?;
         let program = program_parser()
-            .parse(&tokens)
+            .parse(&source_without_comments)
             .into_result()
             .map_err(|e| format!("Parse error: {:?}", e))?;
         let program = crate::resolution::resolve(program, &source_without_comments)

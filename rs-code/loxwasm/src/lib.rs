@@ -3,7 +3,7 @@ use loxlang::execution_env::Deps;
 use loxlang::execution_env::Value;
 use loxlang::parse;
 use loxlang::parse::chumsky_parser;
-use loxlang::resolution::resolve;
+use loxlang::parse_program;
 use loxlang::resolution::resolve_expr_no_var;
 use loxlang::LoxError;
 use serde::{Deserialize, Serialize};
@@ -84,48 +84,19 @@ pub fn eval_expr(src: String) -> LoxResult<f64> {
 fn eval_expr_inner(src: &str) -> Result<Value<'_>, LoxError> {
     use chumsky::Parser;
 
-    // Lex the source code
-    let tokens = chumsky_parser::lexer()
+    // Parse the source directly into an AST
+    let e = chumsky_parser::expr_parser()
         .parse(src)
         .into_result()
         .map_err(|errors| {
             // Take the first error
             let err = errors.into_iter().next().unwrap();
             let span = err.span();
-            // TODO integrate these errors with LoxError to simplify this
-            LoxError::LexicalError(parse::LexicalError {
-                src: src.to_string(),
-                source_offset: span.start.into(),
-            })
-        })?;
-
-    // Parse the tokens into an AST
-    let e = chumsky_parser::expr_parser()
-        .parse(&tokens)
-        .into_result()
-        .map_err(|errors| {
-            // Take the first error
-            let err = errors.into_iter().next().unwrap();
-            let token_span = err.span();
-
-            // Map token indices to character positions
-            let char_span = if token_span.start < tokens.len() {
-                let start_char = tokens[token_span.start].1.start;
-                let end_char = if token_span.end <= tokens.len() && token_span.end > 0 {
-                    tokens[token_span.end - 1].1.end
-                } else {
-                    tokens[token_span.start].1.end
-                };
-                miette::SourceSpan::new(start_char.into(), end_char - start_char)
-            } else {
-                // If the span is beyond the tokens, use the end of the source
-                miette::SourceSpan::new(src.len().into(), 0)
-            };
 
             LoxError::ParseError(parse::ParseError::UnexpectedToken {
                 src: src.to_string(),
-                span: char_span,
-                help: format!("Unexpected token while parsing expression"),
+                span: miette::SourceSpan::new(span.start.into(), span.end - span.start),
+                help: format!("Unexpected input while parsing expression"),
             })
         })?;
 
@@ -152,54 +123,7 @@ pub fn run_program(src: String) -> LoxResult<Vec<String>> {
 }
 
 fn run_program_inner(src: &str) -> Result<Vec<String>, LoxError> {
-    use chumsky::Parser;
-
-    // Lex the source code using chumsky
-    let tokens = chumsky_parser::lexer()
-        .parse(src)
-        .into_result()
-        .map_err(|errors| {
-            // Take the first error
-            let err = errors.into_iter().next().unwrap();
-            let span = err.span();
-            LoxError::LexicalError(parse::LexicalError {
-                src: src.to_string(),
-                source_offset: span.start.into(),
-            })
-        })?;
-
-    // Parse the program using chumsky
-    let program = chumsky_parser::program_parser()
-        .parse(&tokens)
-        .into_result()
-        .map_err(|errors| {
-            // Take the first error
-            let err = errors.into_iter().next().unwrap();
-            let token_span = err.span();
-
-            // Map token indices to character positions
-            let char_span = if token_span.start < tokens.len() {
-                let start_char = tokens[token_span.start].1.start;
-                let end_char = if token_span.end <= tokens.len() && token_span.end > 0 {
-                    tokens[token_span.end - 1].1.end
-                } else {
-                    tokens[token_span.start].1.end
-                };
-                miette::SourceSpan::new(start_char.into(), end_char - start_char)
-            } else {
-                // If the span is beyond the tokens, use the end of the source
-                miette::SourceSpan::new(src.len().into(), 0)
-            };
-
-            LoxError::ParseError(parse::ParseError::UnexpectedToken {
-                src: src.to_string(),
-                span: char_span,
-                help: format!("Unexpected token while parsing program"),
-            })
-        })?;
-
-    // Resolve variables
-    let program = resolve(program, &src)?;
+    let program = parse_program(src)?;
 
     let deps = TestDeps {
         printed: Vec::new(),
