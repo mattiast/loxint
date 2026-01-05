@@ -12,16 +12,25 @@ fn to_byte_span(span: SimpleSpan) -> ByteSpan {
         end: span.end,
     }
 }
+
+/// Parser for whitespace and comments
+fn whitespace_and_comments<'src>(
+) -> impl Parser<'src, &'src str, (), extra::Err<Simple<'src, char>>> + Clone {
+    let comment = just("//").then(none_of('\n').repeated()).ignored();
+    let whitespace = one_of(" \t\n\r").ignored();
+    whitespace.or(comment).repeated().ignored()
+}
+
 fn jop<'src, T: Clone>(
     s: &'static str,
     v: T,
 ) -> impl Parser<'src, &'src str, T, extra::Err<Simple<'src, char>>> + Clone {
-    just(s).padded().to(v)
+    just(s).padded_by(whitespace_and_comments()).to(v)
 }
 fn kw<'src>(
     s: &'static str,
 ) -> impl Parser<'src, &'src str, (), extra::Err<Simple<'src, char>>> + Clone {
-    text::keyword(s).padded().to(())
+    text::keyword(s).padded_by(whitespace_and_comments()).to(())
 }
 
 /// Parser for expressions
@@ -72,11 +81,11 @@ pub fn expr_parser<'src>(
             literal,
             ident,
             expr.clone()
-                .padded()
+                .padded_by(whitespace_and_comments())
                 .delimited_by(lparen.clone(), rparen.clone())
                 .labelled("parenthesized expression"),
         ))
-        .padded();
+        .padded_by(whitespace_and_comments());
 
         // Define operator parsers for each precedence level
         let equal = jop("=", ());
@@ -103,7 +112,7 @@ pub fn expr_parser<'src>(
         // Function calls: foo(arg1, arg2, ...)
         let arg_list = expr
             .clone()
-            .padded()
+            .padded_by(whitespace_and_comments())
             .separated_by(comma)
             .allow_trailing()
             .collect::<Vec<_>>()
@@ -180,6 +189,7 @@ pub fn expr_parser<'src>(
                 Expression::FunctionCall(Box::new(func), args).annotate(ann)
             }),
         ))
+        .padded_by(whitespace_and_comments())
     })
 }
 
@@ -195,7 +205,7 @@ fn for_loop_def_parser<'src>() -> impl Parser<
     let lparen = jop("(", ());
     let rparen = jop(")", ());
 
-    let ident = text::ascii::ident().padded();
+    let ident = text::ascii::ident().padded_by(whitespace_and_comments());
 
     kw("for")
         .ignore_then(lparen.clone())
@@ -248,7 +258,7 @@ pub fn decl_parser<'src>(
         let lbrace = jop("{", ());
         let rbrace = jop("}", ());
 
-        let ident = text::ascii::ident().padded();
+        let ident = text::ascii::ident().padded_by(whitespace_and_comments());
 
         // Statements (defined inline to avoid mutual recursion)
         let stmt = recursive(|stmt| {
@@ -277,7 +287,7 @@ pub fn decl_parser<'src>(
             // Block statement
             let block = decl
                 .clone()
-                .padded()
+                .padded_by(whitespace_and_comments())
                 .repeated()
                 .collect()
                 .delimited_by(lbrace.clone(), rbrace.clone())
@@ -354,10 +364,11 @@ pub fn program_parser<'src>() -> impl Parser<
     extra::Err<Simple<'src, char>>,
 > {
     decl_parser()
-        .padded()
+        .padded_by(whitespace_and_comments())
         .repeated()
         .collect()
         .map(|decls| Program { decls })
+        .then_ignore(whitespace_and_comments())
         .then_ignore(end())
 }
 
@@ -679,5 +690,44 @@ mod tests {
         assert!(result.is_ok(), "Failed to parse fibonacci program");
         let program = result.unwrap();
         assert_eq!(program.decls.len(), 3); // function, var, while
+    }
+
+    #[test]
+    fn test_comments_in_expression() {
+        let src = "2 + 3 // this is a comment";
+        let ast = expr_parser().parse(src).unwrap();
+
+        if let Expression::Binary {
+            left,
+            operator,
+            right,
+        } = ast.value
+        {
+            assert!(matches!(left.value, Expression::NumberLiteral(2.0)));
+            assert_eq!(operator, BOperator::PLUS);
+            assert!(matches!(right.value, Expression::NumberLiteral(3.0)));
+        } else {
+            panic!("Expected binary expression");
+        }
+    }
+
+    #[test]
+    fn test_comments_in_program() {
+        let src = r#"
+            // Variable declaration
+            var x = 10; // Initialize x
+
+            // Print the value
+            print x; // This prints 10
+        "#;
+        let program = program_parser().parse(src).unwrap();
+
+        assert_eq!(program.decls.len(), 2);
+        assert!(matches!(program.decls[0], Declaration::Var(_, _)));
+        if let Declaration::Statement(stmt) = &program.decls[1] {
+            assert!(matches!(stmt.value, Statement::Print(_)));
+        } else {
+            panic!("Expected statement");
+        }
     }
 }

@@ -92,24 +92,6 @@ impl TestCase {
         outputs
     }
 
-    /// Strip comments from source code for parsing
-    /// The test case format includes comments like "// expect: value" which need to be
-    /// stripped before parsing since the lexer doesn't handle comments
-    fn strip_comments(source: &str) -> String {
-        source
-            .lines()
-            .map(|line| {
-                // Find the position of "//" and strip everything after it
-                if let Some(pos) = line.find("//") {
-                    &line[..pos]
-                } else {
-                    line
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
     /// Run the test case and return the actual output
     pub fn run(&self) -> Result<Vec<String>, String> {
         let deps = TestDeps::new();
@@ -117,13 +99,13 @@ impl TestCase {
         let mut runtime = Runtime::new(env);
 
         // Strip comments from source before parsing
-        let source_without_comments = Self::strip_comments(&self.source);
+        let source = &self.source;
 
         let program = program_parser()
-            .parse(&source_without_comments)
+            .parse(source)
             .into_result()
             .map_err(|e| format!("Parse error: {:?}", e))?;
-        let program = crate::resolution::resolve(program, &source_without_comments)
+        let program = crate::resolution::resolve(program, source)
             .map_err(|e| format!("Resolution error: {}", e))?;
 
         runtime

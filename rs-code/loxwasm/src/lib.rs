@@ -69,12 +69,18 @@ pub fn eval_expr(src: String) -> LoxResult<f64> {
         Ok(Value::Atomic(AtomicValue::Number(x))) => LoxResult::Success(x),
         Ok(Value::Atomic(x)) => LoxResult::Error(ErrorInfo {
             message: format!("Expected number, got another value {}", x),
-            span: ErrorSpan { start: 0, end: src.len() },
+            span: ErrorSpan {
+                start: 0,
+                end: src.len(),
+            },
             error_type: "type".to_string(),
         }),
         Ok(Value::Function(_)) | Ok(Value::NativeFunction(_)) => LoxResult::Error(ErrorInfo {
             message: "Expected number, got a function".to_string(),
-            span: ErrorSpan { start: 0, end: src.len() },
+            span: ErrorSpan {
+                start: 0,
+                end: src.len(),
+            },
             error_type: "type".to_string(),
         }),
         Err(e) => LoxResult::Error(e.into()),
@@ -236,7 +242,10 @@ mod tests {
                 // Position: "1 + 2 + )" -> index 8
                 // If it was using token indices, it would point to much earlier (token 6)
                 assert_eq!(e.error_type, "parse");
-                assert_eq!(e.span.start, 8, "Parse error should point to character 8 (the ')'), not token index");
+                assert_eq!(
+                    e.span.start, 8,
+                    "Parse error should point to character 8 (the ')'), not token index"
+                );
             }
         }
     }
