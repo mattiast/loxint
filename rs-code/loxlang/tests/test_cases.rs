@@ -13,10 +13,7 @@ fn run_all_test_cases() {
 
     let test_dir = workspace_root.join("test-cases");
 
-    assert!(
-        test_dir.exists(),
-        "Workspace root directory does not exist"
-    );
+    assert!(test_dir.exists(), "Workspace root directory does not exist");
 
     let results = run_test_directory(&test_dir).expect("Failed to run test directory");
 
@@ -42,10 +39,7 @@ fn run_all_test_cases() {
     println!("Failed: {}", failed);
     println!("Total:  {}", passed + failed);
 
-    assert!(
-        failed == 0,
-        "Some test cases failed. See summary above."
-    );
+    assert!(failed == 0, "Some test cases failed. See summary above.");
 }
 
 #[test]

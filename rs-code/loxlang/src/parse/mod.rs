@@ -5,7 +5,8 @@ use miette::{Diagnostic, SourceOffset};
 use thiserror::Error;
 
 use crate::syntax::{
-    AnnotatedExpression, AnnotatedStatement, Declaration, Expression, Program, Statement, VariableDecl,
+    AnnotatedExpression, AnnotatedStatement, Declaration, Expression, Program, Statement,
+    VariableDecl,
 };
 
 #[derive(Error, Debug, Diagnostic)]

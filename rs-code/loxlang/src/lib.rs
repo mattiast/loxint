@@ -38,7 +38,9 @@ impl LoxError {
     pub fn message(&self) -> String {
         match self {
             LoxError::LexicalError(_) => format!("No valid token"),
-            LoxError::ParseError(parse::ParseError::UnexpectedToken { help, .. }) => format!("Parse error:\n{}", help),
+            LoxError::ParseError(parse::ParseError::UnexpectedToken { help, .. }) => {
+                format!("Parse error:\n{}", help)
+            }
             LoxError::ParseError(parse::ParseError::UnexpectedEnd { help, .. }) => {
                 format!("Unexpected end of input:\n{}", help)
             }
