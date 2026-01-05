@@ -183,6 +183,56 @@ pub fn expr_parser<'src>(
     })
 }
 
+fn for_loop_def_parser<'src>() -> impl Parser<
+    'src,
+    &'src str,
+    ForLoopDef<'src, &'src str, &'src str, ByteSpan>,
+    extra::Err<Simple<'src, char>>,
+> + Clone {
+    let expr = expr_parser();
+    let semicolon = jop(";", ());
+    let equal = jop("=", ());
+    let lparen = jop("(", ());
+    let rparen = jop(")", ());
+
+    let ident = text::ascii::ident().padded();
+
+    kw("for")
+        .ignore_then(lparen.clone())
+        .ignore_then(
+            // Parse initializer - can be var declaration, expression, or empty
+            choice((
+                // var x = expr;
+                kw("var")
+                    .ignore_then(ident.clone())
+                    .then(equal.clone().ignore_then(expr.clone()).or_not())
+                    .then_ignore(semicolon.clone())
+                    .map(|(name, init)| (Some(VariableDecl(name)), init)),
+                // expr;
+                expr.clone()
+                    .then_ignore(semicolon.clone())
+                    .map(|e| (None, Some(e))),
+                // ; (empty)
+                semicolon.clone().to((None, None)),
+            )),
+        )
+        .then(
+            // Parse condition - expression or empty
+            expr.clone().or_not().then_ignore(semicolon.clone()),
+        )
+        .then(
+            // Parse increment - expression or empty
+            expr.clone().or_not(),
+        )
+        .then_ignore(rparen.clone())
+        .map(|(((var_name, start), cond), increment)| ForLoopDef {
+            var_name,
+            start,
+            cond,
+            increment,
+        })
+}
+
 type ParsedDeclaration<'src> = Declaration<'src, &'src str, &'src str, ByteSpan>;
 
 /// Parser for statements and declarations (combined to avoid mutual recursion issues)
@@ -206,7 +256,7 @@ pub fn decl_parser<'src>(
             let print_stmt = kw("print")
                 .ignore_then(expr.clone())
                 .then_ignore(semicolon.clone())
-                .map_with(|e, ann| Statement::Print(e).annotate(to_byte_span(ann.span())));
+                .map(Statement::Print);
 
             // Return statement
             let return_stmt = kw("return")
@@ -216,14 +266,13 @@ pub fn decl_parser<'src>(
                     Statement::Return(
                         e.unwrap_or_else(|| Expression::Nil.annotate(to_byte_span(ann.span()))),
                     )
-                    .annotate(to_byte_span(ann.span()))
                 });
 
             // Expression statement
             let expr_stmt = expr
                 .clone()
                 .then_ignore(semicolon.clone())
-                .map_with(|e, ann| Statement::Expression(e).annotate(to_byte_span(ann.span())));
+                .map(Statement::Expression);
 
             // Block statement
             let block = decl
@@ -232,74 +281,26 @@ pub fn decl_parser<'src>(
                 .repeated()
                 .collect()
                 .delimited_by(lbrace.clone(), rbrace.clone())
-                .map_with(|decls, ann| Statement::Block(decls).annotate(to_byte_span(ann.span())));
+                .map(Statement::Block);
 
             // If statement
             let if_stmt = kw("if")
                 .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
                 .then(stmt.clone())
                 .then(kw("else").ignore_then(stmt.clone()).or_not())
-                .map_with(|((cond, then_branch), else_branch), ann| {
+                .map(|((cond, then_branch), else_branch)| {
                     Statement::If(cond, Box::new(then_branch), else_branch.map(Box::new))
-                        .annotate(to_byte_span(ann.span()))
                 });
 
             // While statement
             let while_stmt = kw("while")
                 .ignore_then(expr.clone().delimited_by(lparen.clone(), rparen.clone()))
                 .then(stmt.clone())
-                .map_with(|(cond, body), ann| {
-                    Statement::While(cond, Box::new(body)).annotate(to_byte_span(ann.span()))
-                });
+                .map(|(cond, body)| Statement::While(cond, Box::new(body)));
 
-            // For loop - desugared into while loop
-            // for (init; cond; incr) body
-            // =>
-            // {
-            //   init;
-            //   while (cond) {
-            //     { body }
-            //     incr;
-            //   }
-            // }
-            let for_stmt = kw("for")
-                .ignore_then(lparen.clone())
-                .ignore_then(
-                    // Parse initializer - can be var declaration, expression, or empty
-                    choice((
-                        // var x = expr;
-                        kw("var")
-                            .ignore_then(ident.clone())
-                            .then(equal.clone().ignore_then(expr.clone()).or_not())
-                            .then_ignore(semicolon.clone())
-                            .map(|(name, init)| (Some(VariableDecl(name)), init)),
-                        // expr;
-                        expr.clone()
-                            .then_ignore(semicolon.clone())
-                            .map(|e| (None, Some(e))),
-                        // ; (empty)
-                        semicolon.clone().to((None, None)),
-                    )),
-                )
-                .then(
-                    // Parse condition - expression or empty
-                    expr.clone().or_not().then_ignore(semicolon.clone()),
-                )
-                .then(
-                    // Parse increment - expression or empty
-                    expr.clone().or_not(),
-                )
-                .then_ignore(rparen.clone())
+            let for_stmt = for_loop_def_parser()
                 .then(stmt.clone())
-                .map(|((((var_name, start), cond), increment), body)| {
-                    let for_loop_def = ForLoopDef {
-                        var_name,
-                        start,
-                        cond,
-                        increment,
-                    };
-                    for_loop_into_while_loop(for_loop_def, body)
-                });
+                .map(|(for_loop_def, body)| for_loop_into_while_loop(for_loop_def, body).value);
 
             choice((
                 print_stmt,
@@ -310,6 +311,7 @@ pub fn decl_parser<'src>(
                 block,
                 expr_stmt,
             ))
+            .map_with(|e, ann| (e).annotate(to_byte_span(ann.span())))
         });
 
         // Variable declaration
